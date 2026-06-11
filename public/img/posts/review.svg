@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
   <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#FF850A"/><stop offset="0.5" stop-color="#E62A65"/><stop offset="1" stop-color="#05B0EB"/>
   </linearGradient></defs>
-  <rect width="600" height="600" fill="#242428"/>
-  <rect width="600" height="14" fill="url(#g)"/>
-  <text x="40" y="80" fill="#FF850A" font-family="Roboto,Arial" font-weight="900" font-size="26">BIO-ONE</text>
-  <text x="40" y="300" fill="#FFFFFF" font-family="Roboto,Arial" font-weight="900" font-size="52" style="white-space:pre">★★★★★ CLIENT REVIEW</text>
-  <text x="40" y="540" fill="#BDBDBF" font-family="Roboto,Arial" font-size="22">Help First, Business Second.</text>
-  <rect x="0" y="586" width="600" height="14" fill="url(#g)"/>
+  <rect width="1080" height="1350" fill="#242428"/>
+  <rect width="1080" height="24" fill="url(#g)"/>
+  <text x="72" y="150" fill="#FF850A" font-family="Roboto,Arial" font-weight="900" font-size="44">BIO-ONE</text>
+  <text x="72" y="660" fill="#FFFFFF" font-family="Roboto,Arial" font-weight="900" font-size="84">★★★★★ CLIENT REVIEW</text>
+  <text x="72" y="1230" fill="#BDBDBF" font-family="Roboto,Arial" font-size="36">Help First, Business Second.</text>
+  <rect x="0" y="1326" width="1080" height="24" fill="url(#g)"/>
 </svg>
