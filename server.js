@@ -12,11 +12,12 @@ const crypto = require('crypto');
 
 const auth = require('./lib/auth');
 const store = require('./lib/store');
+const library = require('./lib/library');
 const providers = require('./lib/providers');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const library = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'library.json'), 'utf8'));
+const UPLOAD_DIR = path.join(PUBLIC_DIR, 'img', 'posts');
 
 const MIME = { '.html':'text/html', '.css':'text/css', '.js':'text/javascript', '.json':'application/json', '.svg':'image/svg+xml', '.png':'image/png' };
 
@@ -25,11 +26,16 @@ function send(res, status, body, headers = {}) {
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
+const MAX_BODY = 10 * 1024 * 1024; // 10MB — accommodates base64 image uploads
 function readBody(req) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', c => (data += c));
+    req.on('data', c => {
+      data += c;
+      if (data.length > MAX_BODY) { reject(new Error('payload too large')); req.destroy(); }
+    });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { resolve({}); } });
+    req.on('error', reject);
   });
 }
 
@@ -86,7 +92,37 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { platforms: providers.allMeta() });
     }
     if (p === '/api/library') {
-      return send(res, 200, { posts: library.posts });
+      return send(res, 200, { posts: library.all() });
+    }
+
+    // ---- Admin (corporate only): manage the shared content library ----
+    if (p.startsWith('/api/admin/')) {
+      if (user.role !== 'admin') return send(res, 403, { error: 'Corporate access only' });
+
+      if (p === '/api/admin/library' && req.method === 'POST') {
+        const body = await readBody(req);
+        const post = body.id ? library.update(body.id, body) : library.create(body);
+        if (!post) return send(res, 404, { error: 'post not found' });
+        return send(res, 200, { post });
+      }
+      if (p === '/api/admin/library/delete' && req.method === 'POST') {
+        const { id } = await readBody(req);
+        return library.remove(id) ? send(res, 200, { ok: true }) : send(res, 404, { error: 'post not found' });
+      }
+      if (p === '/api/admin/upload' && req.method === 'POST') {
+        // Accepts { filename, dataUrl } where dataUrl is a base64 data URI.
+        // Keeps uploads dependency-free (no multipart parser needed).
+        const { filename, dataUrl } = await readBody(req);
+        const m = /^data:(image\/(png|jpeg|jpg|svg\+xml|webp|gif));base64,(.+)$/.exec(dataUrl || '');
+        if (!m) return send(res, 400, { error: 'Unsupported image. Use PNG, JPG, SVG, WEBP or GIF.' });
+        const ext = { 'png':'png','jpeg':'jpg','jpg':'jpg','svg+xml':'svg','webp':'webp','gif':'gif' }[m[2]];
+        const safe = (filename || 'upload').replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40);
+        const name = `up-${Date.now()}-${safe}.${ext}`;
+        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+        fs.writeFileSync(path.join(UPLOAD_DIR, name), Buffer.from(m[3], 'base64'));
+        return send(res, 200, { image: `/img/posts/${name}` });
+      }
+      return send(res, 404, { error: 'unknown admin endpoint' });
     }
     if (p === '/api/accounts' && req.method === 'GET') {
       return send(res, 200, { accounts: store.getAccounts(user.id) });

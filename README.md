@@ -18,7 +18,7 @@ No dependencies to install — it runs on the Node standard library.
 
 **Demo logins** (password `demo`):
 - `modesto@biooneinc.com` — a franchisee
-- `corporate@biooneinc.com` — corporate admin
+- `corporate@biooneinc.com` — corporate admin (sees the **Admin** tab to manage the library)
 
 ## What works today (demo mode)
 
@@ -32,6 +32,9 @@ No dependencies to install — it runs on the Node standard library.
   (e.g. X's 280-char cap)
 - ✅ Publish now or schedule
 - ✅ History feed with per-platform status
+- ✅ **Admin section** (corporate accounts only): add / edit / delete library
+  posts, upload post images, and choose which platforms each post supports —
+  all from the UI, no code changes needed
 
 Publishing is **simulated** in demo mode so the whole experience is usable
 before any platform API is approved.
