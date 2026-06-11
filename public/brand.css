@@ -69,6 +69,15 @@ header.topnav {
 .btn-ghost { background: transparent; color: var(--bo-soft-black); border: 1.5px solid var(--bo-gray-light); }
 .btn-ghost:hover { border-color: var(--bo-gray); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-icon {
+  width: 42px; height: 42px; padding: 0; flex: 0 0 42px;
+  justify-content: center; border-radius: 50%;
+  background: transparent; color: var(--bo-gray);
+  border: 1.5px solid var(--bo-gray-light);
+  transition: color .15s, border-color .15s, background .15s;
+}
+.btn-icon svg { width: 18px; height: 18px; display: block; }
+.btn-icon:hover { color: var(--bo-orange); border-color: var(--bo-orange); background: rgba(255,133,10,.08); }
 
 /* Cards */
 .grid { display: grid; gap: 18px; }

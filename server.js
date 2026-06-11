@@ -75,6 +75,29 @@ const server = http.createServer(async (req, res) => {
         'Set-Cookie': `session=${result.token}; HttpOnly; Path=/; SameSite=Lax`
       });
     }
+    if (p === '/api/register' && req.method === 'POST') {
+      const body = await readBody(req);
+      const result = auth.register(body);
+      if (result.error) return send(res, 400, { error: result.error });
+      return send(res, 200, { user: result.user }, {
+        'Set-Cookie': `session=${result.token}; HttpOnly; Path=/; SameSite=Lax`
+      });
+    }
+    if (p === '/api/forgot' && req.method === 'POST') {
+      const { email } = await readBody(req);
+      const token = auth.createResetToken(email);
+      // DEMO: return the reset link directly so the flow works without an
+      // email service. PRODUCTION: email the link instead and return only
+      // { ok: true } — never expose the token in the response.
+      const resetLink = token ? `/#reset=${token}` : null;
+      return send(res, 200, { ok: true, demoResetLink: resetLink });
+    }
+    if (p === '/api/reset' && req.method === 'POST') {
+      const { token, password } = await readBody(req);
+      const result = auth.resetPassword(token, password);
+      if (result.error) return send(res, 400, { error: result.error });
+      return send(res, 200, { ok: true, email: result.email });
+    }
     if (p === '/api/logout' && req.method === 'POST') {
       auth.logout(getCookie(req, 'session'));
       return send(res, 200, { ok: true }, { 'Set-Cookie': 'session=; Path=/; Max-Age=0' });

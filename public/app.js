@@ -19,6 +19,9 @@ const platMeta = id => state.platforms.find(p => p.id === id) || { name:id, colo
 
 // ---------- bootstrap ----------
 async function boot() {
+  // arriving via a password-reset link? (/#reset=TOKEN)
+  const resetMatch = location.hash.match(/^#reset=([0-9a-f]+)$/);
+  if (resetMatch) return renderReset(resetMatch[1]);
   try {
     const { user } = await api.get('/me');
     state.user = user;
@@ -34,28 +37,119 @@ async function loadData() {
   state.platforms = pl.platforms; state.library = lib.posts; state.accounts = acc.accounts;
 }
 
-// ---------- login ----------
-function renderLogin() {
+// ---------- login / signup / forgot / reset ----------
+function authShell(inner) {
   app.innerHTML = `
     <div class="login-wrap">
-      <form class="login-card" id="loginForm">
+      <form class="login-card" id="authForm">
         <div class="logo" style="font-size:1.5rem;"><span class="mark">B1</span>
           <div>Bio-One Social<small>Help First, Business Second.</small></div></div>
-        <p class="subtle" style="margin-top:14px;">Sign in to manage your locations' social media.</p>
-        <label>Email<input name="email" type="email" value="modesto@biooneinc.com" required /></label>
-        <label>Password<input name="password" type="password" value="demo" required /></label>
-        <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Sign In</button>
-        <p class="subtle" style="font-size:.8rem; margin-top:14px;">Demo accounts: modesto@ / corporate@ &middot; password <b>demo</b></p>
+        ${inner}
       </form>
     </div>`;
-  document.getElementById('loginForm').addEventListener('submit', async e => {
+  return document.getElementById('authForm');
+}
+
+function authLinks(links) {
+  return `<div style="display:flex; justify-content:space-between; margin-top:16px; font-size:.85rem;">
+    ${links.map(([label, mode]) => `<a href="#" data-auth="${mode}">${label}</a>`).join('')}
+  </div>`;
+}
+
+function wireAuthLinks(form) {
+  form.querySelectorAll('a[data-auth]').forEach(a => a.onclick = e => {
     e.preventDefault();
-    const f = new FormData(e.target);
+    ({ login: renderLogin, signup: renderSignup, forgot: renderForgot })[a.dataset.auth]();
+  });
+}
+
+function renderLogin() {
+  const form = authShell(`
+    <p class="subtle" style="margin-top:14px;">Sign in to manage your location's social media.</p>
+    <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+    <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Sign In</button>
+    ${authLinks([['Create an account', 'signup'], ['Forgot password?', 'forgot']])}
+    <p class="subtle" style="font-size:.8rem; margin-top:14px;">Demo: modesto@biooneinc.com or corporate@biooneinc.com &middot; password <b>demo</b></p>`);
+  wireAuthLinks(form);
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(form);
     try {
       const { user } = await api.post('/login', { email: f.get('email'), password: f.get('password') });
       state.user = user; await loadData(); renderApp();
     } catch (err) { toast(err.error || 'Login failed'); }
-  });
+  };
+}
+
+function renderSignup() {
+  const form = authShell(`
+    <p class="subtle" style="margin-top:14px;">Create your franchisee account.</p>
+    <label>Your name<input name="name" autocomplete="name" placeholder="e.g. Patricia Smith" required /></label>
+    <label>Franchise location<input name="location" placeholder="e.g. Bio-One of Modesto, CA" required /></label>
+    <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+    <label>Password<input name="password" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters" required /></label>
+    <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Create Account</button>
+    ${authLinks([['← Back to sign in', 'login']])}`);
+  wireAuthLinks(form);
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(form);
+    try {
+      const { user } = await api.post('/register', {
+        name: f.get('name'), location: f.get('location'),
+        email: f.get('email'), password: f.get('password')
+      });
+      state.user = user; await loadData();
+      toast('Welcome to Bio-One Social, ' + user.name.split(' ')[0] + '!');
+      renderApp();
+    } catch (err) { toast(err.error || 'Could not create account'); }
+  };
+}
+
+function renderForgot() {
+  const form = authShell(`
+    <p class="subtle" style="margin-top:14px;">Enter your email and we'll send you a link to reset your password.</p>
+    <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+    <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Send reset link</button>
+    <div id="resetSent"></div>
+    ${authLinks([['← Back to sign in', 'login']])}`);
+  wireAuthLinks(form);
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(form);
+    const { demoResetLink } = await api.post('/forgot', { email: f.get('email') });
+    document.getElementById('resetSent').innerHTML = `
+      <div class="muted-note" style="margin-top:16px;">
+        If an account exists for that email, a reset link has been sent.
+        ${demoResetLink ? `<br/><br/><b>Demo mode</b> (no email service connected): <a href="${demoResetLink}">click here to reset your password</a>.` : ''}
+      </div>`;
+    if (demoResetLink) document.querySelector('#resetSent a').onclick = ev => {
+      ev.preventDefault();
+      renderReset(demoResetLink.split('=')[1]);
+    };
+  };
+}
+
+function renderReset(token) {
+  const form = authShell(`
+    <p class="subtle" style="margin-top:14px;">Choose a new password.</p>
+    <label>New password<input name="password" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters" required /></label>
+    <label>Confirm new password<input name="confirm" type="password" autocomplete="new-password" minlength="6" required /></label>
+    <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Set new password</button>
+    ${authLinks([['← Back to sign in', 'login']])}`);
+  wireAuthLinks(form);
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(form);
+    if (f.get('password') !== f.get('confirm')) return toast('Passwords do not match');
+    try {
+      await api.post('/reset', { token, password: f.get('password') });
+      history.replaceState(null, '', location.pathname); // clear #reset= from URL
+      toast('Password updated — sign in with your new password');
+      renderLogin();
+    } catch (err) { toast(err.error || 'Reset failed'); }
+  };
 }
 
 // ---------- shell ----------
@@ -110,9 +204,13 @@ function renderLibrary(root) {
         <span class="tag">${esc(post.category)}</span>
         <h2 style="font-size:1.05rem;">${esc(post.title)}</h2>
         <p class="subtle" style="font-size:.9rem; max-height:3em; overflow:hidden;">${esc(post.caption)}</p>
-        <div style="display:flex; gap:8px; margin-top:12px;">
-          <button class="btn btn-primary" data-id="${esc(post.id)}">Use this post</button>
-          <button class="btn btn-ghost" style="padding:11px 15px;" data-dl="${esc(post.id)}" title="Download design to your computer">⬇</button>
+        <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
+          <button class="btn btn-primary" style="flex:1; justify-content:center;" data-id="${esc(post.id)}">Use this post</button>
+          <button class="btn btn-icon" data-dl="${esc(post.id)}" title="Download design to your computer" aria-label="Download design">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>`).join('');

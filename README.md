@@ -24,6 +24,10 @@ No dependencies to install — it runs on the Node standard library.
 
 - ✅ Franchisee login with per-tenant isolation (you only ever see your own
   accounts + history — verified server-side on every request)
+- ✅ **Self-serve accounts** — franchisees create their own login (always a
+  franchisee role, never admin), with salted scrypt password hashing and a
+  full forgot/reset-password flow (reset links are shown in-app in demo
+  mode; wire an email provider for production)
 - ✅ Connect / disconnect each of the 6 platforms
 - ✅ Content library with 8 starter posts in your brand's categories
   (Did You Know, Community, Announcement, Client Review, Tip, Warning,
