@@ -108,7 +108,10 @@ function renderLibrary(root) {
         <span class="tag">${esc(post.category)}</span>
         <h2 style="font-size:1.05rem;">${esc(post.title)}</h2>
         <p class="subtle" style="font-size:.9rem; max-height:3em; overflow:hidden;">${esc(post.caption)}</p>
-        <button class="btn btn-primary" style="margin-top:12px;" data-id="${esc(post.id)}">Use this post</button>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="btn btn-primary" data-id="${esc(post.id)}">Use this post</button>
+          <button class="btn btn-ghost" style="padding:11px 14px;" data-dl="${esc(post.id)}" title="Download image">⬇</button>
+        </div>
       </div>
     </div>`).join('');
   root.appendChild(grid);
@@ -117,6 +120,10 @@ function renderLibrary(root) {
     state.editing = { libraryId: post.id, caption: post.caption, image: post.image,
       platforms: post.platforms.filter(t => state.accounts[t]) };
     renderView();
+  });
+  grid.querySelectorAll('button[data-dl]').forEach(b => b.onclick = () => {
+    const post = state.library.find(p => p.id === b.dataset.dl);
+    downloadFile(post.image, post.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''));
   });
 }
 
@@ -153,7 +160,15 @@ function renderComposer(root) {
       <div class="card">
         <div class="thumb"><img src="${esc(e.image)}" onerror="this.parentNode.style.minHeight='220px'"/></div>
         <div class="pad"><span class="tag">Live preview</span>
-          <p id="preview" style="white-space:pre-wrap; font-size:.92rem;"></p></div>
+          <p id="preview" style="white-space:pre-wrap; font-size:.92rem;"></p>
+          <hr style="border:0; border-top:1px solid #EBECEF; margin:14px 0;" />
+          <p class="subtle" style="font-size:.82rem; margin:0 0 10px;">Prefer to post by hand (or a platform isn't connected yet)? Grab the assets:</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-ghost" id="dlImg" style="padding:8px 14px;">⬇ Download image</button>
+            <button class="btn btn-ghost" id="copyCap" style="padding:8px 14px;">📋 Copy caption</button>
+            <button class="btn btn-ghost" id="dlCap" style="padding:8px 14px;">⬇ Caption .txt</button>
+          </div>
+        </div>
       </div>
     </div>`;
 
@@ -191,6 +206,39 @@ function renderComposer(root) {
   if (schedBtn) schedBtn.onclick = () => { document.getElementById('schedRow').style.display='flex'; };
   const schedGo = document.getElementById('schedGo');
   if (schedGo) schedGo.onclick = () => { const v = document.getElementById('schedAt').value; if(!v) return toast('Pick a date/time'); publish(new Date(v).toISOString()); };
+
+  // Download / copy — for manual posting when an API isn't live or connected
+  const slug = (state.library.find(p=>p.id===e.libraryId)?.title || 'bio-one-post')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  document.getElementById('dlImg').onclick   = () => downloadFile(e.image, slug);
+  document.getElementById('copyCap').onclick = () => copyText(e.caption);
+  document.getElementById('dlCap').onclick   = () => downloadText(e.caption, slug + '-caption.txt');
+}
+
+// Download a same-origin asset (image lives in /public, so a fetch→blob
+// download works and respects the original file extension).
+async function downloadFile(url, baseName) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error();
+    const blob = await res.blob();
+    const ext = (url.split('.').pop() || 'png').split(/[?#]/)[0];
+    triggerDownload(URL.createObjectURL(blob), `${baseName}.${ext}`, true);
+    toast('Image downloaded');
+  } catch { toast('Could not download image'); }
+}
+function downloadText(text, filename) {
+  triggerDownload(URL.createObjectURL(new Blob([text], { type: 'text/plain' })), filename, true);
+  toast('Caption downloaded');
+}
+function triggerDownload(href, filename, revoke) {
+  const a = document.createElement('a');
+  a.href = href; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  if (revoke) setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('Caption copied'); }
+  catch { toast('Copy not available — select the text manually'); }
 }
 
 // ---------- connections ----------

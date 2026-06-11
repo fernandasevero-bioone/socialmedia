@@ -31,6 +31,9 @@ No dependencies to install — it runs on the Node standard library.
 - ✅ Caption editor with live preview + per-platform character-limit warnings
   (e.g. X's 280-char cap)
 - ✅ Publish now or schedule
+- ✅ **Download to post manually** — download the post image and copy/download
+  the customized caption, for platforms that aren't connected yet or that
+  require posting by hand (e.g. TikTok before API audit)
 - ✅ History feed with per-platform status
 - ✅ **Admin section** (corporate accounts only): add / edit / delete library
   posts, upload post images, and choose which platforms each post supports —
