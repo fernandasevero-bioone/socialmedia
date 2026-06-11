@@ -36,7 +36,9 @@ No dependencies to install — it runs on the Node standard library.
   (e.g. X's 280-char cap)
 - ✅ Publish now or schedule
 - ✅ **Calendar** — franchisees see their scheduled (and published) posts on a
-  month view, with platform + time on each day
+  month view, with platform + time on each day; click a scheduled post to
+  edit its caption, reschedule it, or cancel it (published posts are
+  view-only)
 - ✅ **Download a design** — franchisees can save any corporate library design
   to their computer with one click (the ⬇ button on each library card)
 - ✅ History feed with per-platform status

@@ -165,6 +165,29 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/posts' && req.method === 'GET') {
       return send(res, 200, { posts: store.getPosts(user.id) });
     }
+    if (p === '/api/posts/update' && req.method === 'POST') {
+      // edit caption and/or reschedule — scheduled posts only
+      const { id, caption, scheduledFor } = await readBody(req);
+      const existing = store.getPost(user.id, id);
+      if (!existing) return send(res, 404, { error: 'Post not found' });
+      if (existing.status !== 'scheduled') return send(res, 400, { error: 'Only scheduled posts can be edited' });
+      const fields = {};
+      if (caption !== undefined) fields.caption = caption;
+      if (scheduledFor !== undefined) {
+        if (!scheduledFor || isNaN(Date.parse(scheduledFor))) return send(res, 400, { error: 'Invalid date/time' });
+        fields.scheduledFor = scheduledFor;
+      }
+      return send(res, 200, { post: store.updatePost(user.id, id, fields) });
+    }
+    if (p === '/api/posts/delete' && req.method === 'POST') {
+      // cancel a scheduled post — scheduled posts only
+      const { id } = await readBody(req);
+      const existing = store.getPost(user.id, id);
+      if (!existing) return send(res, 404, { error: 'Post not found' });
+      if (existing.status !== 'scheduled') return send(res, 400, { error: 'Only scheduled posts can be canceled' });
+      store.deletePost(user.id, id);
+      return send(res, 200, { ok: true });
+    }
     if (p === '/api/publish' && req.method === 'POST') {
       const { libraryId, caption, platforms: targets, scheduledFor } = await readBody(req);
       const connected = store.getAccounts(user.id);

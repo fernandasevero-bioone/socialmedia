@@ -399,7 +399,7 @@ async function renderCalendar(root) {
       const bg = p.status === 'scheduled' ? 'var(--bo-orange)' : 'var(--bo-teal)';
       const icon = p.status === 'scheduled' ? '🗓️' : '✅';
       const label = `${icon} ${time} · ${p.platforms.map(x => platMeta(x).name).join(', ')}`;
-      return `<div class="cal-ev" style="background:${bg}" title="${esc(p.caption)}">${esc(label)}</div>`;
+      return `<button class="cal-ev" style="background:${bg}" data-ev="${esc(p.id)}" title="${esc(p.caption)}">${esc(label)}</button>`;
     }).join('');
     cells += `<div class="cal-cell ${isToday ? 'today' : ''}"><div class="cal-date">${day}</div>${events}</div>`;
   }
@@ -427,6 +427,74 @@ async function renderCalendar(root) {
   document.getElementById('calPrev').onclick  = () => { state.calMonth = new Date(year, month - 1, 1); renderCalendar(root); };
   document.getElementById('calNext').onclick  = () => { state.calMonth = new Date(year, month + 1, 1); renderCalendar(root); };
   document.getElementById('calToday').onclick = () => { state.calMonth = new Date(today.getFullYear(), today.getMonth(), 1); renderCalendar(root); };
+
+  root.querySelectorAll('button[data-ev]').forEach(b => b.onclick = () => {
+    const post = posts.find(p => p.id === b.dataset.ev);
+    if (post) openPostModal(post, () => renderCalendar(root));
+  });
+}
+
+// modal for viewing/editing a calendar post.
+// Scheduled posts: edit caption, reschedule, or cancel. Published: read-only.
+function openPostModal(post, onChange) {
+  const isScheduled = post.status === 'scheduled';
+  // datetime-local needs local time formatted as YYYY-MM-DDTHH:MM
+  const d = new Date(post.scheduledFor || post.createdAt);
+  const pad = n => String(n).padStart(2, '0');
+  const localVal = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span class="badge ${isScheduled ? 'no' : 'ok'}">${isScheduled ? '🗓️ Scheduled' : '✅ Published'}</span>
+        <button class="btn btn-ghost" id="mClose" style="padding:6px 14px;">✕</button>
+      </div>
+      <div class="platforms" style="margin:12px 0;">
+        ${post.platforms.map(t => `<span class="chip" style="background:${platMeta(t).color}"><span class="dot"></span>${esc(platMeta(t).name)}</span>`).join('')}
+      </div>
+      ${isScheduled ? `
+        <label style="font-weight:700; font-size:.85rem;">Caption
+          <textarea id="mCap" style="margin-top:6px;">${esc(post.caption)}</textarea></label>
+        <label style="font-weight:700; font-size:.85rem; display:block; margin-top:12px;">Scheduled for
+          <input type="datetime-local" id="mWhen" value="${localVal}"
+            style="display:block; margin-top:6px; padding:10px; border:1.5px solid var(--bo-gray-light); border-radius:9px; font-family:inherit; font-size:.95rem;"/></label>
+        <div style="display:flex; gap:10px; margin-top:20px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="mSave">Save changes</button>
+          <button class="btn btn-ghost" id="mCancel" style="color:var(--bo-pink); border-color:#f5c2d3; margin-left:auto;">Cancel this post</button>
+        </div>`
+      : `
+        <p style="white-space:pre-wrap;">${esc(post.caption)}</p>
+        <p class="subtle" style="font-size:.85rem;">Published ${new Date(post.createdAt).toLocaleString()}. Published posts can't be edited here.</p>`}
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  overlay.onclick = e => { if (e.target === overlay) close(); };
+  overlay.querySelector('#mClose').onclick = close;
+
+  if (isScheduled) {
+    overlay.querySelector('#mSave').onclick = async () => {
+      const when = overlay.querySelector('#mWhen').value;
+      if (!when) return toast('Pick a date/time');
+      try {
+        await api.post('/posts/update', { id: post.id,
+          caption: overlay.querySelector('#mCap').value,
+          scheduledFor: new Date(when).toISOString() });
+        toast('Scheduled post updated');
+        close(); onChange();
+      } catch (err) { toast(err.error || 'Update failed'); }
+    };
+    overlay.querySelector('#mCancel').onclick = async () => {
+      if (!confirm('Cancel this scheduled post? It will not be published.')) return;
+      try {
+        await api.post('/posts/delete', { id: post.id });
+        toast('Post canceled');
+        close(); onChange();
+      } catch (err) { toast(err.error || 'Cancel failed'); }
+    };
+  }
 }
 
 // ---------- admin (corporate only) ----------
