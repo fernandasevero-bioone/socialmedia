@@ -71,6 +71,7 @@ function renderApp() {
     <div class="container">
       <div class="tabs">
         <button class="tab ${state.view==='library'?'active':''}" data-v="library">Content Library</button>
+        <button class="tab ${state.view==='calendar'?'active':''}" data-v="calendar">📅 Calendar</button>
         <button class="tab ${state.view==='connections'?'active':''}" data-v="connections">My Accounts</button>
         <button class="tab ${state.view==='history'?'active':''}" data-v="history">History</button>
         ${state.user.role === 'admin' ? `<button class="tab ${state.view==='admin'?'active':''}" data-v="admin">⚙️ Admin</button>` : ''}
@@ -88,6 +89,7 @@ function renderView() {
   const root = document.getElementById('viewRoot');
   if (state.editing) return renderComposer(root);
   if (state.view === 'library')     return renderLibrary(root);
+  if (state.view === 'calendar')    return renderCalendar(root);
   if (state.view === 'connections') return renderConnections(root);
   if (state.view === 'history')     return renderHistory(root);
   if (state.view === 'admin')       return renderAdmin(root);
@@ -263,6 +265,72 @@ async function renderHistory(root) {
     </div></div>`).join('');
 }
 
+// ---------- calendar ----------
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+async function renderCalendar(root) {
+  root.innerHTML = `<p class="subtle">Loading…</p>`;
+  const { posts } = await api.get('/posts');
+
+  // group posts by local YYYY-MM-DD (scheduled use their date; published use posted date)
+  const byDay = {};
+  posts.forEach(p => {
+    const d = new Date(p.scheduledFor || p.createdAt);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    (byDay[key] = byDay[key] || []).push(p);
+  });
+
+  if (!state.calMonth) state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const view = state.calMonth;
+  const year = view.getFullYear(), month = view.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const scheduledCount = posts.filter(p => p.status === 'scheduled' && new Date(p.scheduledFor) >= new Date(today.toDateString())).length;
+
+  let cells = '';
+  for (let i = 0; i < firstDay; i++) cells += `<div class="cal-cell empty"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${year}-${month}-${day}`;
+    const dayPosts = byDay[key] || [];
+    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+    const events = dayPosts.map(p => {
+      const t = new Date(p.scheduledFor || p.createdAt);
+      const time = t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const bg = p.status === 'scheduled' ? 'var(--bo-orange)' : 'var(--bo-teal)';
+      const icon = p.status === 'scheduled' ? '🗓️' : '✅';
+      const label = `${icon} ${time} · ${p.platforms.map(x => platMeta(x).name).join(', ')}`;
+      return `<div class="cal-ev" style="background:${bg}" title="${esc(p.caption)}">${esc(label)}</div>`;
+    }).join('');
+    cells += `<div class="cal-cell ${isToday ? 'today' : ''}"><div class="cal-date">${day}</div>${events}</div>`;
+  }
+
+  root.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+      <h2 style="margin:0;">${MONTHS[month]} ${year}</h2>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <span class="badge ok" style="font-size:.8rem;">${scheduledCount} upcoming scheduled</span>
+        <button class="btn btn-ghost" id="calPrev" style="padding:8px 14px;">←</button>
+        <button class="btn btn-ghost" id="calToday" style="padding:8px 14px;">Today</button>
+        <button class="btn btn-ghost" id="calNext" style="padding:8px 14px;">→</button>
+      </div>
+    </div>
+    <div class="cal-legend">
+      <span><i style="background:var(--bo-orange)"></i> Scheduled</span>
+      <span><i style="background:var(--bo-teal)"></i> Published</span>
+    </div>
+    <div class="cal-grid">
+      ${WEEKDAYS.map(d => `<div class="cal-head">${d}</div>`).join('')}
+      ${cells}
+    </div>
+    ${posts.length ? '' : `<div class="muted-note" style="margin-top:16px;">Nothing scheduled yet. Open a post from the <b>Content Library</b> and choose <b>Schedule…</b> to see it here.</div>`}`;
+
+  document.getElementById('calPrev').onclick  = () => { state.calMonth = new Date(year, month - 1, 1); renderCalendar(root); };
+  document.getElementById('calNext').onclick  = () => { state.calMonth = new Date(year, month + 1, 1); renderCalendar(root); };
+  document.getElementById('calToday').onclick = () => { state.calMonth = new Date(today.getFullYear(), today.getMonth(), 1); renderCalendar(root); };
+}
+
 // ---------- admin (corporate only) ----------
 function blankDraft() {
   return { id: null, title: '', category: '', caption: '', image: '',
@@ -276,25 +344,29 @@ async function renderAdmin(root) {
   root.innerHTML = `
     <div class="grid" style="grid-template-columns: 1fr 1.1fr; align-items:start;">
       <div class="card"><div class="pad">
-        <h2 id="formTitle">Add a new post</h2>
-        <p class="subtle" style="font-size:.9rem;">These appear in every franchisee's Content Library. Use [BRACKETS] for details each location fills in (e.g. [CITY], [YOUR PHONE]).</p>
+        <h2 id="formTitle">➕ Add a template to the library</h2>
+        <p class="subtle" style="font-size:.9rem;">Upload a design and caption here. It instantly appears in every franchisee's Content Library, ready for them to customize and publish. Use [BRACKETS] for details each location fills in (e.g. [CITY], [YOUR PHONE]).</p>
         <form id="adminForm">
-          <label class="alabel">Title<input name="title" required /></label>
-          <label class="alabel">Category<input name="category" list="catlist" placeholder="e.g. Did You Know" /></label>
-          <datalist id="catlist">${[...new Set(posts.map(p=>p.category))].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
-          <label class="alabel">Caption<textarea name="caption" style="min-height:120px;" required></textarea></label>
-          <label class="alabel">Post image</label>
-          <div style="display:flex; gap:12px; align-items:center;">
-            <img id="imgPrev" src="" style="width:64px; height:64px; object-fit:cover; border-radius:8px; background:#EBECEF; display:none;" />
-            <input type="file" id="imgFile" accept="image/*" />
+          <label class="alabel">1. Upload the design image</label>
+          <div class="uploader" id="dropZone">
+            <img id="imgPrev" src="" style="width:72px; height:72px; object-fit:cover; border-radius:8px; background:#EBECEF; display:none;" />
+            <div>
+              <button class="btn btn-blue" type="button" id="pickFileBtn">📤 Choose image from your computer</button>
+              <div class="subtle" style="font-size:.78rem; margin-top:6px;">PNG, JPG, or SVG — e.g. a Canva export from the Bio-One Branding kit.</div>
+            </div>
+            <input type="file" id="imgFile" accept="image/*" style="display:none;" />
           </div>
           <input type="hidden" name="image" />
-          <p class="alabel" style="margin-top:14px;">Available on</p>
+          <label class="alabel">2. Template name<input name="title" placeholder="e.g. Did You Know — Odor Removal" required /></label>
+          <label class="alabel">3. Category<input name="category" list="catlist" placeholder="e.g. Did You Know" /></label>
+          <datalist id="catlist">${[...new Set(posts.map(p=>p.category))].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+          <label class="alabel">4. Default caption<textarea name="caption" style="min-height:120px;" placeholder="Write the caption franchisees start from…" required></textarea></label>
+          <p class="alabel" style="margin-top:14px;">5. Available on</p>
           <div class="platforms" id="adminPlats">
             ${state.platforms.map(p=>`<button type="button" class="chip off" data-p="${p.id}"><span class="dot"></span>${esc(p.name)}</button>`).join('')}
           </div>
           <div style="display:flex; gap:10px; margin-top:20px;">
-            <button class="btn btn-primary" type="submit">Save post</button>
+            <button class="btn btn-primary" type="submit">Save to library</button>
             <button class="btn btn-ghost" type="button" id="resetBtn">Clear</button>
           </div>
         </form>
@@ -318,7 +390,7 @@ async function renderAdmin(root) {
   function fillForm() {
     form.title.value = draft.title; form.category.value = draft.category;
     form.caption.value = draft.caption; form.image.value = draft.image || '';
-    document.getElementById('formTitle').textContent = draft.id ? 'Edit post' : 'Add a new post';
+    document.getElementById('formTitle').textContent = draft.id ? '✏️ Edit template' : '➕ Add a template to the library';
     if (draft.image) { imgPrev.src = draft.image; imgPrev.style.display = 'block'; } else { imgPrev.style.display = 'none'; }
     root.querySelectorAll('#adminPlats .chip').forEach(c => {
       const on = draft.platforms.includes(c.dataset.p);
@@ -334,7 +406,9 @@ async function renderAdmin(root) {
     fillForm();
   });
 
-  document.getElementById('imgFile').onchange = async ev => {
+  const imgFile = document.getElementById('imgFile');
+  document.getElementById('pickFileBtn').onclick = () => imgFile.click();
+  imgFile.onchange = async ev => {
     const file = ev.target.files[0]; if (!file) return;
     const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
     try {
