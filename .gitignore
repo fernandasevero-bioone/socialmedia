@@ -1,0 +1,5 @@
+node_modules/
+data/db.json
+config/platforms.env
+*.log
+.DS_Store

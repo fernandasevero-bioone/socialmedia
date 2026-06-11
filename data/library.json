@@ -1,0 +1,69 @@
+{
+  "_comment": "Corporate-curated post library. Categories mirror the Bio-One Brand Guide p.36 (Social Media Posts & Concepts). Franchisees pick a post, tweak the caption (location/phone/dates), and publish. Replace placeholder image fields with real Canva exports from the Bio-One Branding kit.",
+  "posts": [
+    {
+      "id": "lib-didyouknow-odor",
+      "category": "Did You Know",
+      "title": "Did You Know — Odor Removal",
+      "image": "/img/posts/didyouknow.svg",
+      "caption": "Did you know? Lingering odors after a loss or accident aren't just unpleasant — they can signal contaminants that household cleaners can't reach. Bio-One uses professional-grade decontamination to make a space safe again. Help first, business second. 📞 Call [YOUR PHONE] — available 24/7. #BioOne #OdorRemoval",
+      "platforms": ["facebook", "instagram", "linkedin", "x", "pinterest"]
+    },
+    {
+      "id": "lib-community-firstresponders",
+      "category": "Community",
+      "title": "Community — Backing First Responders",
+      "image": "/img/posts/community.svg",
+      "caption": "We back the blue. 💙 This week our [CITY] team is proud to support our local first responders who answer the call when it matters most. Thank you for your service. #WeBackTheBlue #BioOne #[CITY]",
+      "platforms": ["facebook", "instagram", "linkedin", "x"]
+    },
+    {
+      "id": "lib-announcement-grandopening",
+      "category": "Announcement",
+      "title": "Announcement — Now Serving Your Area",
+      "image": "/img/posts/announcement.svg",
+      "caption": "Bio-One of [CITY] is here to help. 🧬 We provide crime & trauma scene cleaning, hoarding remediation, odor removal, and biohazard decontamination — with compassion, experience, and respect. Locally owned. Available 24/7. 📞 [YOUR PHONE]",
+      "platforms": ["facebook", "instagram", "linkedin", "x", "pinterest", "tiktok"]
+    },
+    {
+      "id": "lib-clientreview",
+      "category": "Client Review",
+      "title": "Client Review — 5 Stars",
+      "image": "/img/posts/review.svg",
+      "caption": "⭐️⭐️⭐️⭐️⭐️ \"[PASTE A REAL 5-STAR REVIEW HERE]\" — Thank you for trusting Bio-One of [CITY] during a difficult time. Help first, business second. #BioOne #ClientReview #[CITY]",
+      "platforms": ["facebook", "instagram", "linkedin", "x"]
+    },
+    {
+      "id": "lib-tip-hoarding",
+      "category": "Cleaning Tip",
+      "title": "Tip — Starting a Hoarding Cleanup",
+      "image": "/img/posts/tip.svg",
+      "caption": "Helping a loved one with hoarding? Start small: pick ONE surface, not the whole room. Progress over perfection. When it feels overwhelming, our compassionate team is here to help. 📞 Bio-One of [CITY] — [YOUR PHONE]. #HoardingHelp #BioOne",
+      "platforms": ["facebook", "instagram", "linkedin", "pinterest"]
+    },
+    {
+      "id": "lib-warning-safety",
+      "category": "Warning",
+      "title": "Warning — Biohazard Safety",
+      "image": "/img/posts/warning.svg",
+      "caption": "⚠️ Blood and bodily fluids can carry serious health risks. Cleanup is not a DIY job — it requires proper PPE, disinfectants, and disposal. Stay safe and call the professionals. Bio-One of [CITY], available 24/7: [YOUR PHONE]. #BiohazardSafety #BioOne",
+      "platforms": ["facebook", "instagram", "linkedin", "x"]
+    },
+    {
+      "id": "lib-holiday-greeting",
+      "category": "World Holiday Greetings",
+      "title": "Holiday Greeting",
+      "image": "/img/posts/holiday.svg",
+      "caption": "From our family to yours — Bio-One of [CITY] wishes you a safe and happy [HOLIDAY]. We're grateful to serve this community all year long. 💙🧡 #BioOne #[CITY]",
+      "platforms": ["facebook", "instagram", "linkedin", "x", "pinterest"]
+    },
+    {
+      "id": "lib-infographic-services",
+      "category": "Infographic",
+      "title": "Infographic — Our Services",
+      "image": "/img/posts/infographic.svg",
+      "caption": "What does Bio-One handle? More than you might think:\n• Crime & trauma scene cleaning\n• Hoarding remediation\n• Odor removal\n• Biohazard & virus disinfection\n• Undiscovered death\nLocally owned in [CITY]. Help first, business second. 📞 [YOUR PHONE]",
+      "platforms": ["facebook", "instagram", "linkedin", "pinterest"]
+    }
+  ]
+}

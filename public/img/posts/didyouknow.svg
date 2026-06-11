@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FF850A"/><stop offset="0.5" stop-color="#E62A65"/><stop offset="1" stop-color="#05B0EB"/>
+  </linearGradient></defs>
+  <rect width="600" height="600" fill="#242428"/>
+  <rect width="600" height="14" fill="url(#g)"/>
+  <text x="40" y="80" fill="#FF850A" font-family="Roboto,Arial" font-weight="900" font-size="26">BIO-ONE</text>
+  <text x="40" y="300" fill="#FFFFFF" font-family="Roboto,Arial" font-weight="900" font-size="52" style="white-space:pre">DID YOU KNOW?</text>
+  <text x="40" y="540" fill="#BDBDBF" font-family="Roboto,Arial" font-size="22">Help First, Business Second.</text>
+  <rect x="0" y="586" width="600" height="14" fill="url(#g)"/>
+</svg>
