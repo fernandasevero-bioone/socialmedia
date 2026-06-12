@@ -79,8 +79,7 @@ function renderLogin() {
     <label>Email<input name="email" type="email" autocomplete="email" required /></label>
     <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
     <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Sign In</button>
-    ${authLinks([['Create an account', 'signup'], ['Forgot password?', 'forgot']])}
-    <p class="subtle" style="font-size:.8rem; margin-top:14px;">Demo: modesto@biooneinc.com or corporate@biooneinc.com &middot; password <b>demo</b></p>`);
+    ${authLinks([['Create an account', 'signup'], ['Forgot password?', 'forgot']])}`);
   wireAuthLinks(form);
   form.onsubmit = async e => {
     e.preventDefault();
