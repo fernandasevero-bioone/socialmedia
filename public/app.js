@@ -258,10 +258,10 @@ function renderLibrary(root) {
   grid.className = 'grid grid-4';
   grid.innerHTML = visible.map(post => `
     <div class="card">
-      <div class="thumb">${mediaThumb(post.image, post.title)}${(post.media && post.media.length > 1) ? `<span class="count-badge">+${post.media.length - 1}</span>` : ''}</div>
+      <div class="thumb preview-open" data-preview="${esc(post.id)}" title="Click to preview">${mediaThumb(post.image, post.title)}${(post.media && post.media.length > 1) ? `<span class="count-badge">+${post.media.length - 1}</span>` : ''}</div>
       <div class="pad">
         ${post.category ? `<span class="tag">${esc(post.category)}</span>` : ''}
-        <h2 class="card-title">${esc(post.title)}</h2>
+        <h2 class="card-title preview-open" data-preview="${esc(post.id)}" style="cursor:pointer;">${esc(post.title)}</h2>
         <p class="subtle clamp-3" style="font-size:.9rem;">${esc(post.caption)}</p>
         <div class="card-actions">
           <button class="btn btn-primary" style="flex:1; justify-content:center;" data-id="${esc(post.id)}">Use this post</button>
@@ -274,14 +274,8 @@ function renderLibrary(root) {
       </div>
     </div>`).join('');
   root.appendChild(grid);
-  grid.querySelectorAll('button[data-id]').forEach(b => b.onclick = () => {
-    const post = state.library.find(p => p.id === b.dataset.id);
-    const media = (post.media && post.media.length) ? [...post.media] : [post.image];
-    state.editing = { libraryId: post.id, caption: post.caption, image: post.image, media,
-      category: post.category || '', platforms: post.platforms.filter(t => state.accounts[t]),
-      perPlatform: false, captions: {} };
-    renderView();
-  });
+  grid.querySelectorAll('button[data-id]').forEach(b => b.onclick = () => usePost(state.library.find(p => p.id === b.dataset.id)));
+  grid.querySelectorAll('[data-preview]').forEach(el => el.onclick = () => openLibraryPreview(state.library.find(p => p.id === el.dataset.preview)));
   grid.querySelectorAll('button[data-dl]').forEach(b => b.onclick = () => {
     const post = state.library.find(p => p.id === b.dataset.dl);
     const ext = (post.image.split('.').pop() || 'png').split(/[?#]/)[0];
@@ -289,6 +283,53 @@ function renderLibrary(root) {
     triggerDownload(post.image, `${name}.${ext}`);
     toast('Downloading design…');
   });
+}
+
+// open a library post into the composer
+function usePost(post) {
+  const media = (post.media && post.media.length) ? [...post.media] : [post.image];
+  state.editing = { libraryId: post.id, caption: post.caption, image: post.image, media,
+    category: post.category || '', platforms: post.platforms.filter(t => state.accounts[t]),
+    perPlatform: false, captions: {} };
+  renderView();
+}
+
+// large preview of a library post before using it
+function openLibraryPreview(post) {
+  if (!post) return;
+  const media = (post.media && post.media.length) ? post.media : [post.image];
+  const cover = media[0];
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card" style="width:min(640px,95vw);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        ${post.category ? `<span class="tag">${esc(post.category)}</span>` : '<span></span>'}
+        <button class="btn btn-ghost" id="pvClose" style="padding:6px 14px;">✕</button>
+      </div>
+      <h2 style="margin:8px 0 12px;">${esc(post.title)}</h2>
+      <div class="preview-media">${isVideo(cover)
+        ? `<video src="${esc(cover)}" controls playsinline></video>`
+        : `<img src="${esc(cover)}" alt="${esc(post.title)}"/>`}</div>
+      ${media.length > 1 ? `<div class="gallery" style="padding:10px 0;">${media.map((m,i)=>`<div class="g-thumb ${i===0?'cover':''}">${isVideo(m)?`<video src="${esc(m)}" muted></video>`:`<img src="${esc(m)}"/>`}</div>`).join('')}</div>` : ''}
+      <p style="white-space:pre-wrap; font-size:.92rem; margin:14px 0; max-height:30vh; overflow:auto;">${esc(post.caption)}</p>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" id="pvUse" style="flex:1; justify-content:center;">Use this post</button>
+        <button class="btn btn-icon" id="pvDl" title="Download" aria-label="Download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.onclick = ev => { if (ev.target === overlay) close(); };
+  overlay.querySelector('#pvClose').onclick = close;
+  overlay.querySelector('#pvUse').onclick = () => { close(); usePost(post); };
+  overlay.querySelector('#pvDl').onclick = () => {
+    const ext = (cover.split('.').pop() || 'png').split(/[?#]/)[0];
+    triggerDownload(cover, post.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') + '.' + ext);
+    toast('Downloading design…');
+  };
 }
 
 // ---------- composer ----------
@@ -508,20 +549,26 @@ async function renderHistory(root) {
   root.innerHTML = `<p class="subtle">Loading…</p>`;
   const { posts } = await api.get('/posts');
   if (!posts.length) { root.innerHTML = `<div class="muted-note">No posts yet. Publish your first one from the Content Library.</div>`; return; }
-  root.innerHTML = posts.map(post => `
-    <div class="card" style="margin-bottom:14px;"><div class="pad">
-      <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-        <span class="badge ${post.status==='published'?'ok':'no'}">${post.status==='scheduled'?'🗓️ Scheduled':'✅ Published'}</span>
-        <span class="subtle" style="font-size:.85rem;">${new Date(post.scheduledFor||post.createdAt).toLocaleString()}</span>
+  root.innerHTML = posts.map(post => {
+    const cover = (post.media && post.media[0]) || post.image;
+    return `
+    <div class="card" style="margin-bottom:14px;"><div class="pad" style="display:flex; gap:14px; align-items:flex-start;">
+      ${cover ? `<div class="hist-thumb">${mediaThumb(cover, '')}${(post.media && post.media.length > 1) ? `<span class="count-badge">+${post.media.length-1}</span>` : ''}</div>` : ''}
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+          <span class="badge ${post.status==='published'?'ok':'no'}">${post.status==='scheduled'?'🗓️ Scheduled':'✅ Published'}</span>
+          <span class="subtle" style="font-size:.85rem;">${new Date(post.scheduledFor||post.createdAt).toLocaleString()}</span>
+        </div>
+        <p style="white-space:pre-wrap; margin:10px 0;">${esc(post.caption)}</p>
+        <div class="platforms">${post.platforms.map(t => {
+          const r = post.results[t];
+          const link = r && r.externalUrl;
+          const chip = `<span class="chip" style="background:${platMeta(t).color}"><span class="dot"></span>${esc(platMeta(t).name)}</span>`;
+          return link ? `<a href="${esc(link)}" target="_blank" style="text-decoration:none;">${chip}</a>` : chip;
+        }).join('')}</div>
       </div>
-      <p style="white-space:pre-wrap; margin:10px 0;">${esc(post.caption)}</p>
-      <div class="platforms">${post.platforms.map(t => {
-        const r = post.results[t];
-        const link = r && r.externalUrl;
-        const chip = `<span class="chip" style="background:${platMeta(t).color}"><span class="dot"></span>${esc(platMeta(t).name)}</span>`;
-        return link ? `<a href="${esc(link)}" target="_blank" style="text-decoration:none;">${chip}</a>` : chip;
-      }).join('')}</div>
-    </div></div>`).join('');
+    </div></div>`;
+  }).join('');
 }
 
 // ---------- analytics ----------
@@ -736,7 +783,10 @@ async function renderAdmin(root) {
     .sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
     .map(u => `<div class="conn-row">
       <div class="conn-left"><b>${esc(u.email)}</b> <span class="subtle">— ${esc(u.name)}, ${esc(u.location)}</span></div>
-      <span class="subtle" style="font-size:.8rem;">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : ''}</span>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="subtle" style="font-size:.8rem;">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : ''}</span>
+        <button class="btn btn-ghost" style="padding:5px 12px; color:#E62A65; border-color:#f5c2d3;" data-del-user="${esc(u.email)}">Delete</button>
+      </div>
     </div>`).join('') : '<p class="subtle" style="font-size:.88rem;">No franchisee sign-ups yet.</p>';
   const outboxRows = outbox.length ? outbox.slice(0, 20).map(m => `
     <div class="conn-row"><div class="conn-left">
@@ -759,6 +809,13 @@ async function renderAdmin(root) {
         <div style="max-height:320px; overflow:auto;">${outboxRows}</div>
       </div></div>
     </div>`;
+
+  root.querySelectorAll('button[data-del-user]').forEach(b => b.onclick = async () => {
+    const email = b.dataset.delUser;
+    if (!confirm(`Delete ${email}? This permanently removes their account, connected accounts, and posts.`)) return;
+    try { await api.post('/admin/users/delete', { email }); toast('User deleted'); renderAdmin(root); }
+    catch (err) { toast(err.error || 'Delete failed'); }
+  });
 }
 
 // ---------- templates (corporate only): categories + list, with create/edit form ----------

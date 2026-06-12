@@ -141,6 +141,11 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/admin/users') {
         return send(res, 200, { users: auth.listUsers() });
       }
+      if (p === '/api/admin/users/delete' && req.method === 'POST') {
+        const { email } = await readBody(req);
+        const r = auth.deleteUser(email);
+        return r.error ? send(res, 400, r) : send(res, 200, { users: auth.listUsers() });
+      }
       if (p === '/api/admin/outbox') {
         return send(res, 200, { outbox: mailer.getOutbox() });
       }
