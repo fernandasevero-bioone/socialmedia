@@ -14,6 +14,27 @@ gradient rules, and Roboto typography are taken directly from the guide.
 npm start          # → http://localhost:3000
 ```
 
+## Deploy it (Render, free tier)
+
+The repo includes `render.yaml`, so you can stand it up on a public URL:
+
+1. Push the code to GitHub (already done on the dev branch).
+2. Go to **render.com**, sign up (free), and connect your GitHub.
+3. **New → Blueprint**, pick this repo. Render reads `render.yaml` and creates
+   the web service. Click **Apply / Deploy**.
+4. After a few minutes you get a URL like `https://bio-one-social-hub.onrender.com`.
+
+**Free-tier caveats (by design, not bugs):**
+- **Data resets** — no persistent disk, so sign-ups, uploaded designs, and
+  scheduled posts are wiped when the service sleeps or redeploys.
+- **Sleeps when idle** — first visit after ~15 min wakes it (~30–60s cold
+  start). While asleep the scheduler is paused, so scheduled posts only fire
+  once someone wakes the app.
+- To fix both, upgrade to a paid instance + disk (see the commented block in
+  `render.yaml`) and set `DATA_DIR` — a small storage tweak makes data persist.
+
+Publishing stays in **demo mode** until each platform's API is approved.
+
 No dependencies to install — it runs on the Node standard library.
 
 **Demo logins** (password `demo`):

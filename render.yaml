@@ -1,0 +1,33 @@
+# Render Blueprint — deploys Bio-One Social Hub as a free Node web service.
+# When you connect this repo to Render as a Blueprint, these settings are
+# filled in automatically. Docs: https://render.com/docs/blueprint-spec
+#
+# NOTE: the "free" plan has no persistent disk, so data resets when the
+# service sleeps or redeploys. To keep data, change `plan: free` to
+# `plan: starter` and add a disk (see the commented block below).
+services:
+  - type: web
+    name: bio-one-social-hub
+    runtime: node
+    plan: free
+    branch: claude/gallant-fermat-dmd95f
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # How often the scheduler checks for due posts (ms). Default 30s.
+      - key: SCHEDULER_INTERVAL_MS
+        value: "30000"
+
+# ── To upgrade to persistent storage later (paid) ──────────────────────────
+#   1. change `plan: free` above to `plan: starter`
+#   2. uncomment the disk block below and add `DATA_DIR=/data` under envVars
+#   3. (a small code tweak will point storage at /data — ask Claude when ready)
+#
+#    disk:
+#      name: data
+#      mountPath: /data
+#      sizeGB: 1
