@@ -176,6 +176,7 @@ function renderApp() {
       <div class="tabs">
         <button class="tab ${state.view==='library'?'active':''}" data-v="library">Content Library</button>
         <button class="tab ${state.view==='calendar'?'active':''}" data-v="calendar">📅 Calendar</button>
+        <button class="tab ${state.view==='analytics'?'active':''}" data-v="analytics">📊 Analytics</button>
         <button class="tab ${state.view==='connections'?'active':''}" data-v="connections">My Accounts</button>
         <button class="tab ${state.view==='history'?'active':''}" data-v="history">History</button>
         ${state.user.role === 'admin' ? `<button class="tab ${state.view==='admin'?'active':''}" data-v="admin">⚙️ Admin</button>
@@ -195,6 +196,7 @@ function renderView() {
   if (state.editing) return renderComposer(root);
   if (state.view === 'library')     return renderLibrary(root);
   if (state.view === 'calendar')    return renderCalendar(root);
+  if (state.view === 'analytics')   return renderAnalytics(root);
   if (state.view === 'connections') return renderConnections(root);
   if (state.view === 'history')     return renderHistory(root);
   if (state.view === 'admin')       return renderAdmin(root);
@@ -238,7 +240,7 @@ function renderLibrary(root) {
   grid.className = 'grid grid-4';
   grid.innerHTML = visible.map(post => `
     <div class="card">
-      <div class="thumb">${mediaThumb(post.image, post.title)}</div>
+      <div class="thumb">${mediaThumb(post.image, post.title)}${(post.media && post.media.length > 1) ? `<span class="count-badge">+${post.media.length - 1}</span>` : ''}</div>
       <div class="pad">
         ${post.category ? `<span class="tag">${esc(post.category)}</span>` : ''}
         <h2 class="card-title">${esc(post.title)}</h2>
@@ -256,8 +258,10 @@ function renderLibrary(root) {
   root.appendChild(grid);
   grid.querySelectorAll('button[data-id]').forEach(b => b.onclick = () => {
     const post = state.library.find(p => p.id === b.dataset.id);
-    state.editing = { libraryId: post.id, caption: post.caption, image: post.image,
-      category: post.category || '', platforms: post.platforms.filter(t => state.accounts[t]) };
+    const media = (post.media && post.media.length) ? [...post.media] : [post.image];
+    state.editing = { libraryId: post.id, caption: post.caption, image: post.image, media,
+      category: post.category || '', platforms: post.platforms.filter(t => state.accounts[t]),
+      perPlatform: false, captions: {} };
     renderView();
   });
   grid.querySelectorAll('button[data-dl]').forEach(b => b.onclick = () => {
@@ -272,15 +276,38 @@ function renderLibrary(root) {
 // ---------- composer ----------
 function renderComposer(root) {
   const e = state.editing;
+  if (!e.media || !e.media.length) e.media = [e.image];
   const connected = state.platforms.filter(p => state.accounts[p.id]);
+  const limitFor = id => platMeta(id).captionLimit || 9999;
+
+  // caption editor: one shared box, or one per selected platform when toggled on
+  const captionEditor = e.perPlatform
+    ? e.platforms.map(t => `
+        <div style="margin-top:12px;">
+          <label class="subtle" style="font-size:.82rem; font-weight:700; display:flex; align-items:center; gap:7px;">
+            <span class="chip" style="background:${platMeta(t).color}; padding:3px 10px;"><span class="dot"></span>${esc(platMeta(t).name)}</span></label>
+          <textarea class="cap-pp" data-pp="${esc(t)}" style="min-height:90px; margin-top:6px;">${esc(e.captions[t] != null ? e.captions[t] : e.caption)}</textarea>
+          <div class="counter" data-cnt="${esc(t)}"></div>
+        </div>`).join('')
+    : `<textarea id="cap">${esc(e.caption)}</textarea><div class="counter" id="counter"></div>`;
+
+  const galleryThumbs = e.media.map((m, i) => `
+    <div class="g-thumb ${i===0?'cover':''}">${isVideo(m) ? `<video src="${esc(m)}" muted></video>` : `<img src="${esc(m)}"/>`}
+      ${i===0 ? '<span class="cover-tag">Cover</span>' : ''}</div>`).join('');
+
   root.innerHTML = `
     <button class="btn btn-ghost" id="backBtn" style="margin-bottom:18px;">← Back to library</button>
     <div class="grid" style="grid-template-columns: 1.3fr 1fr; align-items:start;">
       <div class="card"><div class="pad">
         <h2>Customize your caption</h2>
         <p class="subtle" style="font-size:.9rem;">Replace the [BRACKETS] with your location's details.</p>
-        <textarea id="cap">${esc(e.caption)}</textarea>
-        <div class="counter" id="counter"></div>
+
+        <label class="toggle">
+          <input type="checkbox" id="ppToggle" ${e.perPlatform?'checked':''}/>
+          <span>Customize caption per platform</span>
+        </label>
+
+        <div id="capArea">${captionEditor}</div>
 
         <h2 style="margin-top:18px; font-size:1.1rem;">Publish to</h2>
         ${connected.length ? `<div class="platforms" id="platPick">
@@ -290,37 +317,63 @@ function renderComposer(root) {
 
         <div style="display:flex; gap:10px; margin-top:22px; flex-wrap:wrap;">
           <button class="btn btn-primary" id="pubNow" ${connected.length?'':'disabled'}>Publish now</button>
-          <button class="btn btn-blue" id="schedBtn" ${connected.length?'':'disabled'}>Schedule…</button>
+          <button class="btn btn-blue" id="schedBtn" ${connected.length?'':'disabled'}>📅 Schedule day & time</button>
         </div>
-        <div id="schedRow" style="display:none; margin-top:12px;">
-          <label class="subtle" style="font-size:.85rem;">When:
+        <div id="schedRow" style="display:none; margin-top:12px; align-items:center; gap:10px; flex-wrap:wrap;">
+          <label class="subtle" style="font-size:.85rem;">Date &amp; time:
             <input type="datetime-local" id="schedAt" style="padding:8px; border-radius:8px; border:1.5px solid #BDBDBF; font-family:inherit;"/></label>
-          <button class="btn btn-ghost" id="schedGo">Confirm schedule</button>
+          <button class="btn btn-primary" id="schedGo">Confirm schedule</button>
         </div>
       </div></div>
 
       <div class="card">
-        <div class="thumb">${isVideo(e.image)
-          ? `<video src="${esc(e.image)}" controls playsinline></video>`
-          : `<img src="${esc(e.image)}" onerror="this.parentNode.style.minHeight='220px'"/>`}</div>
+        <div class="thumb">${isVideo(e.media[0])
+          ? `<video src="${esc(e.media[0])}" controls playsinline></video>`
+          : `<img src="${esc(e.media[0])}" onerror="this.parentNode.style.minHeight='220px'"/>`}</div>
+        ${e.media.length > 1 ? `<div class="gallery">${galleryThumbs}</div>` : ''}
         <div class="pad"><span class="tag">Live preview</span>
           <p id="preview" style="white-space:pre-wrap; font-size:.92rem;"></p></div>
       </div>
     </div>`;
 
-  const cap = document.getElementById('cap');
-  const counter = document.getElementById('counter');
   const preview = document.getElementById('preview');
-  const minLimit = () => Math.min(...e.platforms.map(p => platMeta(p).captionLimit || 9999), 9999);
-  const refresh = () => {
+  function counterText(len, lim) { return `${len} / ${lim} chars`; }
+
+  function refreshShared() {
+    const cap = document.getElementById('cap');
     e.caption = cap.value;
     preview.textContent = cap.value;
-    const lim = e.platforms.length ? minLimit() : 280;
-    const over = cap.value.length > lim;
-    counter.textContent = `${cap.value.length} / ${lim} chars${e.platforms.length?` (tightest: ${platMeta(e.platforms.reduce((a,b)=>(platMeta(a).captionLimit<platMeta(b).captionLimit?a:b))).name})`:''}`;
-    counter.classList.toggle('over', over);
+    const lim = e.platforms.length ? Math.min(...e.platforms.map(limitFor)) : 280;
+    const counter = document.getElementById('counter');
+    counter.textContent = counterText(cap.value.length, lim) + (e.platforms.length ? ` (tightest platform)` : '');
+    counter.classList.toggle('over', cap.value.length > lim);
+  }
+  function refreshPerPlatform() {
+    root.querySelectorAll('textarea.cap-pp').forEach(ta => {
+      const t = ta.dataset.pp; e.captions[t] = ta.value;
+      const cnt = root.querySelector(`[data-cnt="${t}"]`);
+      const lim = limitFor(t);
+      cnt.textContent = counterText(ta.value.length, lim);
+      cnt.classList.toggle('over', ta.value.length > lim);
+    });
+    preview.textContent = e.captions[e.platforms[0]] != null ? e.captions[e.platforms[0]] : e.caption;
+  }
+  function refresh() { e.perPlatform ? refreshPerPlatform() : refreshShared(); }
+
+  if (e.perPlatform) {
+    root.querySelectorAll('textarea.cap-pp').forEach(ta => ta.addEventListener('input', refreshPerPlatform));
+  } else {
+    document.getElementById('cap').addEventListener('input', refreshShared);
+  }
+  refresh();
+
+  document.getElementById('ppToggle').onchange = ev => {
+    e.perPlatform = ev.target.checked;
+    if (e.perPlatform) { // seed each platform's caption from the shared one
+      e.platforms.forEach(t => { if (e.captions[t] == null) e.captions[t] = e.caption; });
+    }
+    renderComposer(root);
   };
-  cap.addEventListener('input', refresh); refresh();
 
   document.getElementById('backBtn').onclick = () => { state.editing = null; renderView(); };
   root.querySelectorAll('button[data-p]').forEach(b => b.onclick = () => {
@@ -331,10 +384,14 @@ function renderComposer(root) {
 
   const publish = async (scheduledFor) => {
     if (!e.platforms.length) return toast('Pick at least one account');
+    const captions = e.perPlatform
+      ? Object.fromEntries(e.platforms.map(t => [t, e.captions[t] != null ? e.captions[t] : e.caption]))
+      : null;
     try {
-      const { post } = await api.post('/publish', { libraryId: e.libraryId, caption: e.caption, category: e.category || '', platforms: e.platforms, scheduledFor });
+      await api.post('/publish', { libraryId: e.libraryId, caption: e.caption, captions,
+        category: e.category || '', media: e.media, platforms: e.platforms, scheduledFor });
       toast(scheduledFor ? '🗓️ Scheduled!' : '✅ Published to ' + e.platforms.length + ' account(s)');
-      state.editing = null; state.view = 'history'; renderView();
+      state.editing = null; state.view = scheduledFor ? 'calendar' : 'history'; renderView();
     } catch (err) { toast(err.error || 'Publish failed'); }
   };
   const pubNow = document.getElementById('pubNow'); if (pubNow) pubNow.onclick = () => publish(null);
@@ -402,6 +459,55 @@ async function renderHistory(root) {
         return link ? `<a href="${esc(link)}" target="_blank" style="text-decoration:none;">${chip}</a>` : chip;
       }).join('')}</div>
     </div></div>`).join('');
+}
+
+// ---------- analytics ----------
+async function renderAnalytics(root) {
+  root.innerHTML = `<p class="subtle">Loading…</p>`;
+  const { posts } = await api.get('/posts');
+
+  let published = 0, scheduled = 0, failedPlatforms = 0, sentPlatforms = 0;
+  const perPlatform = {};   // platform -> { ok, fail }
+  const perCategory = {};   // category -> count
+  posts.forEach(p => {
+    if (p.status === 'scheduled') scheduled++; else published++;
+    const cat = p.category || 'Uncategorized';
+    perCategory[cat] = (perCategory[cat] || 0) + 1;
+    Object.entries(p.results || {}).forEach(([t, r]) => {
+      perPlatform[t] = perPlatform[t] || { ok: 0, fail: 0 };
+      if (r.ok === false) { perPlatform[t].fail++; failedPlatforms++; }
+      else { perPlatform[t].ok++; sentPlatforms++; }
+    });
+  });
+
+  const stat = (label, value, color) =>
+    `<div class="stat"><div class="stat-num" style="color:${color||'var(--bo-soft-black)'}">${value}</div><div class="stat-label">${label}</div></div>`;
+
+  const maxCat = Math.max(1, ...Object.values(perCategory));
+  const catBars = Object.entries(perCategory).sort((a,b)=>b[1]-a[1]).map(([c, n]) => `
+    <div class="bar-row"><span class="bar-label">${esc(c)}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${(n/maxCat*100).toFixed(0)}%"></span></span>
+      <span class="bar-val">${n}</span></div>`).join('') || '<p class="subtle">No posts yet.</p>';
+
+  const platRows = Object.entries(perPlatform).map(([t, s]) => `
+    <div class="conn-row">
+      <span class="chip" style="background:${platMeta(t).color}"><span class="dot"></span>${esc(platMeta(t).name)}</span>
+      <span class="subtle" style="font-size:.88rem;">${s.ok} sent${s.fail ? ` · <span style="color:var(--bo-pink); font-weight:700;">${s.fail} failed</span>` : ''}</span>
+    </div>`).join('') || '<p class="subtle">Nothing published yet.</p>';
+
+  root.innerHTML = `
+    <h2 style="margin:0 0 4px;">Your analytics</h2>
+    <p class="subtle" style="font-size:.88rem; margin-top:0;">Activity for ${esc(state.user.location)}. Engagement metrics (likes, views) will appear here once each platform's API is connected live.</p>
+    <div class="stat-row">
+      ${stat('Published', published, 'var(--bo-teal)')}
+      ${stat('Scheduled', scheduled, 'var(--bo-orange)')}
+      ${stat('Successful sends', sentPlatforms)}
+      ${stat('Failed sends', failedPlatforms, failedPlatforms ? 'var(--bo-pink)' : undefined)}
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr; align-items:start; margin-top:18px;">
+      <div class="card"><div class="pad"><h2 style="font-size:1.05rem;">Posts by category</h2>${catBars}</div></div>
+      <div class="card"><div class="pad"><h2 style="font-size:1.05rem;">By platform</h2>${platRows}</div></div>
+    </div>`;
 }
 
 // ---------- calendar ----------
@@ -555,7 +661,7 @@ function openPostModal(post, onChange) {
 
 // ---------- admin (corporate only) ----------
 function blankDraft() {
-  return { id: null, title: '', category: '', caption: '', image: '',
+  return { id: null, title: '', category: '', caption: '', image: '', media: [],
     platforms: ['facebook','instagram','linkedin'] };
 }
 
@@ -563,8 +669,35 @@ async function renderAdmin(root) {
   if (state.user.role !== 'admin') { state.view = 'library'; return renderView(); }
 
   const cats = state.categories || [];
+  const [{ users }, { outbox }] = await Promise.all([ api.get('/admin/users'), api.get('/admin/outbox') ]);
+  const signups = users.filter(u => u.role !== 'admin');
+  const signupRows = signups.length ? signups
+    .sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
+    .map(u => `<div class="conn-row">
+      <div class="conn-left"><b>${esc(u.email)}</b> <span class="subtle">— ${esc(u.name)}, ${esc(u.location)}</span></div>
+      <span class="subtle" style="font-size:.8rem;">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : ''}</span>
+    </div>`).join('') : '<p class="subtle" style="font-size:.88rem;">No franchisee sign-ups yet.</p>';
+  const outboxRows = outbox.length ? outbox.slice(0, 10).map(m => `
+    <div class="conn-row"><div class="conn-left">
+      <span class="badge no">✉️</span>
+      <div><b style="font-size:.9rem;">${esc(m.to)}</b><div class="subtle" style="font-size:.8rem;">${esc(m.subject)}</div></div>
+    </div><span class="subtle" style="font-size:.8rem;">${new Date(m.sentAt).toLocaleString()}</span></div>`).join('')
+    : '<p class="subtle" style="font-size:.88rem;">No notifications sent yet. Failure alerts to franchisees will appear here.</p>';
+
   root.innerHTML = `
     <div class="admin-stack">
+    <div class="card" style="margin-bottom:18px;"><div class="pad">
+      <h2 style="font-size:1.1rem;">👥 Franchisee sign-ups <span class="subtle" style="font-weight:400;">(${signups.length})</span></h2>
+      <p class="subtle" style="font-size:.88rem;">Everyone who created an account. Use it to track adoption or export your mailing list.</p>
+      <div style="max-height:260px; overflow:auto;">${signupRows}</div>
+    </div></div>
+
+    <div class="card" style="margin-bottom:18px;"><div class="pad">
+      <h2 style="font-size:1.1rem;">✉️ Notifications sent</h2>
+      <p class="subtle" style="font-size:.88rem;">Failure alerts emailed to franchisees. (Demo mode logs them here; connect an email provider to deliver for real.)</p>
+      <div style="max-height:220px; overflow:auto;">${outboxRows}</div>
+    </div></div>
+
     <div class="card" style="margin-bottom:18px;"><div class="pad">
       <h2 style="font-size:1.1rem;">🏷️ Categories</h2>
       <p class="subtle" style="font-size:.88rem;">These power the filter franchisees see in the Content Library, and the category picker below. Edit or delete existing templates under the <b>Templates</b> tab.</p>
@@ -586,15 +719,15 @@ async function renderAdmin(root) {
         <h2 id="formTitle">➕ Add a template to the library</h2>
         <p class="subtle" style="font-size:.9rem;">Upload a design and caption here. It instantly appears in every franchisee's Content Library, ready for them to customize and publish. Use [BRACKETS] for details each location fills in (e.g. [CITY], [YOUR PHONE]).</p>
         <form id="adminForm">
-          <label class="alabel">1. Upload the design (image or video)</label>
+          <label class="alabel">1. Upload designs (images or video)</label>
           <div class="uploader" id="dropZone">
-            <div id="mediaPrev" class="media-prev" style="display:none;"></div>
             <div>
-              <button class="btn btn-blue" type="button" id="pickFileBtn">📤 Choose image or video</button>
-              <div class="subtle" style="font-size:.78rem; margin-top:6px;">Images: PNG, JPG, SVG. Videos: MP4, WEBM, MOV (keep videos short).</div>
+              <button class="btn btn-blue" type="button" id="pickFileBtn">📤 Add image or video</button>
+              <div class="subtle" style="font-size:.78rem; margin-top:6px;">Add one or several. The first is the cover. Images: PNG, JPG, SVG. Videos: MP4, WEBM, MOV.</div>
             </div>
-            <input type="file" id="imgFile" accept="image/*,video/*" style="display:none;" />
+            <input type="file" id="imgFile" accept="image/*,video/*" multiple style="display:none;" />
           </div>
+          <div id="mediaList" class="media-list"></div>
           <input type="hidden" name="image" />
           <label class="alabel">2. Template name<input name="title" placeholder="e.g. Did You Know — Odor Removal" required /></label>
           <label class="alabel">3. Category
@@ -643,23 +776,31 @@ async function renderAdmin(root) {
   });
 
   let draft = state.adminDraft || blankDraft();
+  if (!draft.media) draft.media = draft.image ? [draft.image] : [];
   state.adminDraft = null;
   const form = document.getElementById('adminForm');
-  const mediaPrev = document.getElementById('mediaPrev');
+  const mediaList = document.getElementById('mediaList');
 
-  function showPreview(url) {
-    if (!url) { mediaPrev.style.display = 'none'; mediaPrev.innerHTML = ''; return; }
-    mediaPrev.style.display = 'block';
-    mediaPrev.innerHTML = isVideo(url)
-      ? `<video src="${esc(url)}" muted playsinline></video>`
-      : `<img src="${esc(url)}" />`;
+  function renderMediaList() {
+    draft.image = draft.media[0] || '';
+    form.image.value = draft.image;
+    mediaList.innerHTML = draft.media.map((m, i) => `
+      <div class="media-item">
+        <div class="media-prev">${isVideo(m) ? `<video src="${esc(m)}" muted></video>` : `<img src="${esc(m)}"/>`}</div>
+        ${i===0 ? '<span class="cover-tag">Cover</span>' : `<button type="button" class="mini" data-cover="${i}" title="Make cover">★</button>`}
+        <button type="button" class="mini del" data-rm="${i}" title="Remove">✕</button>
+      </div>`).join('');
+    mediaList.querySelectorAll('button[data-rm]').forEach(b => b.onclick = () => { draft.media.splice(+b.dataset.rm, 1); renderMediaList(); });
+    mediaList.querySelectorAll('button[data-cover]').forEach(b => b.onclick = () => {
+      const i = +b.dataset.cover; const [m] = draft.media.splice(i, 1); draft.media.unshift(m); renderMediaList();
+    });
   }
 
   function fillForm() {
     form.title.value = draft.title; form.category.value = draft.category;
-    form.caption.value = draft.caption; form.image.value = draft.image || '';
+    form.caption.value = draft.caption;
     document.getElementById('formTitle').textContent = draft.id ? '✏️ Edit template' : '➕ Add a template to the library';
-    showPreview(draft.image);
+    renderMediaList();
     root.querySelectorAll('#adminPlats .chip').forEach(c => {
       const on = draft.platforms.includes(c.dataset.p);
       c.classList.toggle('off', !on);
@@ -677,14 +818,18 @@ async function renderAdmin(root) {
   const imgFile = document.getElementById('imgFile');
   document.getElementById('pickFileBtn').onclick = () => imgFile.click();
   imgFile.onchange = async ev => {
-    const file = ev.target.files[0]; if (!file) return;
-    toast('Uploading…');
-    const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
-    try {
-      const { image } = await api.post('/admin/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl });
-      draft.image = image; form.image.value = image; showPreview(image);
-      toast(isVideo(image) ? 'Video uploaded' : 'Image uploaded');
-    } catch (err) { toast(err.error || 'Upload failed'); }
+    const files = [...ev.target.files]; if (!files.length) return;
+    toast(`Uploading ${files.length} file(s)…`);
+    for (const file of files) {
+      const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
+      try {
+        const { image } = await api.post('/admin/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl });
+        draft.media.push(image);
+      } catch (err) { toast(err.error || 'Upload failed'); }
+    }
+    imgFile.value = '';
+    renderMediaList();
+    toast('Upload complete');
   };
 
   document.getElementById('resetBtn').onclick = () => { draft = blankDraft(); fillForm(); };
@@ -693,7 +838,7 @@ async function renderAdmin(root) {
     e.preventDefault();
     const wasEditing = !!draft.id;
     const payload = { id: draft.id, title: form.title.value, category: form.category.value,
-      caption: form.caption.value, image: form.image.value, platforms: draft.platforms };
+      caption: form.caption.value, image: form.image.value, media: draft.media, platforms: draft.platforms };
     try {
       await api.post('/admin/library', payload);
       await refreshLibrary();
@@ -748,7 +893,9 @@ async function renderTemplates(root) {
   list.querySelectorAll('button[data-edit]').forEach(b => b.onclick = () => {
     const post = posts.find(p => p.id === b.dataset.edit);
     state.adminDraft = { id: post.id, title: post.title, category: post.category,
-      caption: post.caption, image: post.image, platforms: [...post.platforms] };
+      caption: post.caption, image: post.image,
+      media: (post.media && post.media.length) ? [...post.media] : (post.image ? [post.image] : []),
+      platforms: [...post.platforms] };
     state.view = 'admin'; renderView();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });

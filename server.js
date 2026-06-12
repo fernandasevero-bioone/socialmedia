@@ -14,6 +14,7 @@ const auth = require('./lib/auth');
 const store = require('./lib/store');
 const library = require('./lib/library');
 const providers = require('./lib/providers');
+const mailer = require('./lib/mailer');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -135,6 +136,12 @@ const server = http.createServer(async (req, res) => {
         const { id } = await readBody(req);
         return library.remove(id) ? send(res, 200, { ok: true }) : send(res, 404, { error: 'post not found' });
       }
+      if (p === '/api/admin/users') {
+        return send(res, 200, { users: auth.listUsers() });
+      }
+      if (p === '/api/admin/outbox') {
+        return send(res, 200, { outbox: mailer.getOutbox() });
+      }
       if (p === '/api/admin/categories' && req.method === 'POST') {
         const { name } = await readBody(req);
         const r = library.addCategory(name);
@@ -212,17 +219,22 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true });
     }
     if (p === '/api/publish' && req.method === 'POST') {
-      const { libraryId, caption, category, platforms: targets, scheduledFor } = await readBody(req);
+      const { libraryId, caption, captions, category, media, platforms: targets, scheduledFor } = await readBody(req);
       const connected = store.getAccounts(user.id);
       const chosen = (targets || []).filter(t => connected[t]);
       if (!chosen.length) return send(res, 400, { error: 'No connected accounts selected' });
+
+      // caption for a given platform: per-platform override if provided, else default
+      const captionFor = t => (captions && captions[t] != null && captions[t] !== '') ? captions[t] : caption;
 
       const post = {
         id: crypto.randomBytes(6).toString('hex'),
         franchiseeId: user.id,
         libraryId: libraryId || null,
-        caption,
+        caption,                                   // default caption
+        captions: captions && Object.keys(captions).length ? captions : null, // per-platform overrides
         category: category || '',
+        media: Array.isArray(media) && media.length ? media : null, // multiple images/videos
         platforms: chosen,
         status: scheduledFor ? 'scheduled' : 'published',
         scheduledFor: scheduledFor || null,
@@ -233,8 +245,13 @@ const server = http.createServer(async (req, res) => {
       if (!scheduledFor) {
         for (const t of chosen) {
           const prov = providers.get(t);
-          post.results[t] = await prov.publish(connected[t], post);
+          post.results[t] = await prov.publish(connected[t], { ...post, caption: captionFor(t) });
         }
+        // email the franchisee about any platforms that failed (not on success)
+        const failures = chosen
+          .filter(t => post.results[t] && post.results[t].ok === false)
+          .map(t => ({ platform: providers.get(t).meta().name, error: post.results[t].error }));
+        if (failures.length) mailer.sendPublishFailure(user.email, user.name, post, failures);
       }
       store.addPost(post);
       return send(res, 200, { post });

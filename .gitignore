@@ -6,3 +6,6 @@ config/platforms.env
 
 # admin-uploaded post images (runtime data)
 public/img/posts/up-*
+
+# runtime notification outbox (demo)
+data/outbox.json

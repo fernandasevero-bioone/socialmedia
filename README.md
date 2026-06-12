@@ -36,6 +36,16 @@ No dependencies to install — it runs on the Node standard library.
 - ✅ Caption editor with live preview + per-platform character-limit warnings
   (e.g. X's 280-char cap)
 - ✅ Publish now or schedule
+- ✅ **Multiple images/videos per post** — corporate builds a template with one
+  or many media (first = cover); franchisees publish them as a set
+- ✅ **Per-platform captions** — one shared caption by default; toggle
+  "Customize caption per platform" to tailor each network
+- ✅ **Analytics** — per-franchisee activity: published/scheduled counts,
+  success vs. failed sends, posts by category and by platform
+- ✅ **Failure email notifications** — if a platform fails to publish, the
+  franchisee is emailed (demo mode logs to corporate's Notifications panel;
+  wire an email provider for real delivery)
+- ✅ **Sign-ups list** — corporate sees every franchisee who registered
 - ✅ **Calendar** — franchisees see their scheduled (and published) posts on a
   month view, with platform + time on each day; click a scheduled post to
   edit its caption, reschedule it, or cancel it (published posts are
