@@ -224,9 +224,6 @@ const server = http.createServer(async (req, res) => {
       const chosen = (targets || []).filter(t => connected[t]);
       if (!chosen.length) return send(res, 400, { error: 'No connected accounts selected' });
 
-      // caption for a given platform: per-platform override if provided, else default
-      const captionFor = t => (captions && captions[t] != null && captions[t] !== '') ? captions[t] : caption;
-
       const post = {
         id: crypto.randomBytes(6).toString('hex'),
         franchiseeId: user.id,
@@ -243,14 +240,7 @@ const server = http.createServer(async (req, res) => {
       };
 
       if (!scheduledFor) {
-        for (const t of chosen) {
-          const prov = providers.get(t);
-          post.results[t] = await prov.publish(connected[t], { ...post, caption: captionFor(t) });
-        }
-        // email the franchisee about any platforms that failed (not on success)
-        const failures = chosen
-          .filter(t => post.results[t] && post.results[t].ok === false)
-          .map(t => ({ platform: providers.get(t).meta().name, error: post.results[t].error }));
+        const failures = await deliverPost(post, connected);
         if (failures.length) mailer.sendPublishFailure(user.email, user.name, post, failures);
       }
       store.addPost(post);
@@ -263,7 +253,70 @@ const server = http.createServer(async (req, res) => {
   serveStatic(req, res, p);
 });
 
+// ---- shared publish logic (used by immediate publish AND the scheduler) ----
+// Fills post.results for each platform and returns the list of failures.
+async function deliverPost(post, accounts) {
+  const captionFor = t => (post.captions && post.captions[t] != null && post.captions[t] !== '')
+    ? post.captions[t] : post.caption;
+  post.results = post.results || {};
+  const failures = [];
+  for (const t of post.platforms) {
+    const prov = providers.get(t);
+    if (!prov) {
+      post.results[t] = { ok: false, error: 'unknown platform' };
+      failures.push({ platform: t, error: 'unknown platform' });
+      continue;
+    }
+    if (!accounts[t]) { // account was disconnected between scheduling and send time
+      post.results[t] = { ok: false, error: 'account no longer connected' };
+      failures.push({ platform: prov.meta().name, error: 'account no longer connected' });
+      continue;
+    }
+    post.results[t] = await prov.publish(accounts[t], { ...post, caption: captionFor(t) });
+    if (post.results[t] && post.results[t].ok === false) {
+      failures.push({ platform: prov.meta().name, error: post.results[t].error });
+    }
+  }
+  return failures;
+}
+
+// ---- background scheduler ----
+// Every tick, publish any scheduled posts whose time has arrived. In demo this
+// is a simple in-process interval; for production use a durable job queue or
+// cron so it survives restarts and scales across multiple servers.
+const SCHEDULER_INTERVAL_MS = Number(process.env.SCHEDULER_INTERVAL_MS) || 30 * 1000;
+let schedulerBusy = false;
+async function runScheduler() {
+  if (schedulerBusy) return;
+  schedulerBusy = true;
+  try {
+    const due = store.getDueScheduled(new Date());
+    for (const post of due) {
+      const accounts = store.getAccounts(post.franchiseeId);
+      const failures = await deliverPost(post, accounts);
+      store.updatePostById(post.id, {
+        status: 'published',
+        results: post.results,
+        publishedAt: new Date().toISOString()
+      });
+      const okCount = post.platforms.length - failures.length;
+      console.log(`[scheduler] published ${post.id} → ${okCount} ok, ${failures.length} failed`);
+      if (failures.length) {
+        const owner = store.getUsers().find(u => u.id === post.franchiseeId);
+        if (owner) mailer.sendPublishFailure(owner.email, owner.name, post, failures);
+      }
+    }
+  } catch (err) {
+    console.error('[scheduler] error:', err.message);
+  } finally {
+    schedulerBusy = false;
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`Bio-One Social running → http://localhost:${PORT}`);
   console.log('Demo logins: modesto@biooneinc.com / corporate@biooneinc.com  (password: demo)');
+  setInterval(runScheduler, SCHEDULER_INTERVAL_MS);
+  runScheduler(); // catch anything already due at startup
+  console.log(`Scheduler active — checking every ${SCHEDULER_INTERVAL_MS / 1000}s for due posts.`);
 });

@@ -36,6 +36,12 @@ No dependencies to install — it runs on the Node standard library.
 - ✅ Caption editor with live preview + per-platform character-limit warnings
   (e.g. X's 280-char cap)
 - ✅ Publish now or schedule
+- ✅ **Auto-publishing scheduler** — a background loop checks every 30s and
+  actually publishes scheduled posts when their day & time arrive (per-platform
+  captions and all). If an account was disconnected in the meantime, that send
+  is marked failed and the franchisee is emailed. (Demo: in-process interval;
+  production should use a durable job queue / cron. Tune with the
+  `SCHEDULER_INTERVAL_MS` env var.)
 - ✅ **Multiple images/videos per post** — corporate builds a template with one
   or many media (first = cover); franchisees publish them as a set
 - ✅ **Per-platform captions** — one shared caption by default; toggle
