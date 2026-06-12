@@ -42,7 +42,7 @@ function authShell(inner) {
   app.innerHTML = `
     <div class="login-wrap">
       <form class="login-card" id="authForm">
-        <div class="logo" style="font-size:1.5rem;"><span class="mark">B1</span>
+        <div class="logo" style="font-size:1.5rem;"><img class="mark" src="/favicon.svg" alt="Bio-One" />
           <div>Bio-One Social<small>Help First, Business Second.</small></div></div>
         ${inner}
       </form>
@@ -156,7 +156,7 @@ function renderReset(token) {
 function renderApp() {
   app.innerHTML = `
     <header class="topnav">
-      <div class="logo"><span class="mark">B1</span><div>Bio-One Social<small>${esc(state.user.location)}</small></div></div>
+      <div class="logo"><img class="mark" src="/favicon.svg" alt="Bio-One" /><div>Bio-One Social<small>${esc(state.user.location)}</small></div></div>
       <div style="display:flex; align-items:center; gap:14px;">
         <span class="subtle">${esc(state.user.name)}</span>
         <button class="btn btn-ghost" id="logoutBtn">Sign out</button>
