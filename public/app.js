@@ -174,18 +174,18 @@ function renderApp() {
     </header>
     <div class="container">
       <div class="tabs">
-        <button class="tab ${state.view==='library'?'active':''}" data-v="library">Content Library</button>
+        <button class="tab ${state.view==='library'?'active':''}" data-v="library">📚 Content Library</button>
         <button class="tab ${state.view==='calendar'?'active':''}" data-v="calendar">📅 Calendar</button>
         <button class="tab ${state.view==='analytics'?'active':''}" data-v="analytics">📊 Analytics</button>
-        <button class="tab ${state.view==='connections'?'active':''}" data-v="connections">My Accounts</button>
-        <button class="tab ${state.view==='history'?'active':''}" data-v="history">History</button>
+        <button class="tab ${state.view==='connections'?'active':''}" data-v="connections">🔗 My Accounts</button>
+        <button class="tab ${state.view==='history'?'active':''}" data-v="history">🕘 History</button>
         ${state.user.role === 'admin' ? `<button class="tab ${state.view==='admin'?'active':''}" data-v="admin">⚙️ Admin</button>
         <button class="tab ${state.view==='templates'?'active':''}" data-v="templates">🗂️ Templates</button>` : ''}
       </div>
       <div id="viewRoot"></div>
     </div>`;
   document.getElementById('logoutBtn').onclick = async () => { await api.post('/logout'); state.user=null; renderLogin(); };
-  app.querySelectorAll('.tab').forEach(b => b.onclick = () => { state.view = b.dataset.v; renderView(); });
+  app.querySelectorAll('.tab').forEach(b => b.onclick = () => { state.view = b.dataset.v; state.editing = null; renderView(); });
   renderView();
 }
 
@@ -193,6 +193,9 @@ function connectedCount() { return Object.keys(state.accounts).length; }
 
 function renderView() {
   const root = document.getElementById('viewRoot');
+  // keep the highlighted tab in sync with the current view (also covers
+  // programmatic switches, e.g. publish → calendar, edit template → admin)
+  app.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.v === state.view));
   if (state.editing) return renderComposer(root);
   if (state.view === 'library')     return renderLibrary(root);
   if (state.view === 'calendar')    return renderCalendar(root);

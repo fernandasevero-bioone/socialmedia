@@ -203,6 +203,11 @@ textarea:focus { outline:none; border-color: var(--bo-blue); }
 .tab { padding:9px 18px; border-radius:999px; font-weight:700; cursor:pointer; border:0; background:#EBECEF; color:var(--bo-soft-black); font-family:inherit; font-size:.92rem; }
 .tab.active { background: var(--bo-soft-black); color:#fff; }
 
+/* tiny legal links, fixed in the bottom-right corner */
+.legal-corner { position: fixed; right: 12px; bottom: 10px; font-size: .72rem; color: var(--bo-gray); z-index: 30; opacity: .8; }
+.legal-corner a { color: var(--bo-gray); text-decoration: none; }
+.legal-corner a:hover { color: var(--bo-soft-black); text-decoration: underline; }
+
 /* Calendar */
 .cal-legend { display:flex; gap:18px; margin-bottom:12px; font-size:.82rem; color:var(--bo-black-60); }
 .cal-legend span { display:inline-flex; align-items:center; gap:6px; }
