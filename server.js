@@ -160,24 +160,17 @@ const server = http.createServer(async (req, res) => {
         return r.error ? send(res, 400, r) : send(res, 200, r);
       }
       if (p === '/api/admin/upload' && req.method === 'POST') {
-        // Accepts { filename, dataUrl } where dataUrl is a base64 data URI.
-        // Keeps uploads dependency-free (no multipart parser needed).
-        // PRODUCTION: large videos should stream to cloud storage (S3/GCS)
-        // rather than ride through a base64 JSON body.
-        const { filename, dataUrl } = await readBody(req);
-        const m = /^data:((?:image|video)\/([a-z0-9.+-]+));base64,(.+)$/i.exec(dataUrl || '');
-        if (!m) return send(res, 400, { error: 'Unsupported file. Upload an image (PNG, JPG, SVG, WEBP, GIF) or video (MP4, WEBM, MOV).' });
-        const EXT = { 'png':'png','jpeg':'jpg','jpg':'jpg','svg+xml':'svg','webp':'webp','gif':'gif',
-                      'mp4':'mp4','webm':'webm','quicktime':'mov','x-m4v':'m4v','ogg':'ogg' };
-        const ext = EXT[m[2].toLowerCase()];
-        if (!ext) return send(res, 400, { error: 'Unsupported format: ' + m[2] });
-        const safe = (filename || 'upload').replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40);
-        const name = `up-${Date.now()}-${safe}.${ext}`;
-        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-        fs.writeFileSync(path.join(UPLOAD_DIR, name), Buffer.from(m[3], 'base64'));
-        return send(res, 200, { image: `/img/posts/${name}` });
+        const body = await readBody(req);
+        const r = saveUpload(body);
+        return r.error ? send(res, 400, { error: r.error }) : send(res, 200, { image: r.image });
       }
       return send(res, 404, { error: 'unknown admin endpoint' });
+    }
+    if (p === '/api/upload' && req.method === 'POST') {
+      // any signed-in user can upload media for their own custom posts
+      const body = await readBody(req);
+      const r = saveUpload(body);
+      return r.error ? send(res, 400, { error: r.error }) : send(res, 200, { image: r.image });
     }
     if (p === '/api/accounts' && req.method === 'GET') {
       return send(res, 200, { accounts: store.getAccounts(user.id) });
@@ -254,6 +247,23 @@ const server = http.createServer(async (req, res) => {
   // ---- Static ----
   serveStatic(req, res, p);
 });
+
+// ---- shared upload handler (admin templates AND franchisee custom posts) ----
+// Accepts { filename, dataUrl } (base64 data URI). Dependency-free, no
+// multipart parser. PRODUCTION: stream large videos to cloud storage instead.
+function saveUpload({ filename, dataUrl } = {}) {
+  const m = /^data:((?:image|video)\/([a-z0-9.+-]+));base64,(.+)$/i.exec(dataUrl || '');
+  if (!m) return { error: 'Unsupported file. Upload an image (PNG, JPG, SVG, WEBP, GIF) or video (MP4, WEBM, MOV).' };
+  const EXT = { 'png':'png','jpeg':'jpg','jpg':'jpg','svg+xml':'svg','webp':'webp','gif':'gif',
+                'mp4':'mp4','webm':'webm','quicktime':'mov','x-m4v':'m4v','ogg':'ogg' };
+  const ext = EXT[m[2].toLowerCase()];
+  if (!ext) return { error: 'Unsupported format: ' + m[2] };
+  const safe = (filename || 'upload').replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40);
+  const name = `up-${Date.now()}-${Math.random().toString(36).slice(2,7)}-${safe}.${ext}`;
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  fs.writeFileSync(path.join(UPLOAD_DIR, name), Buffer.from(m[3], 'base64'));
+  return { image: `/img/posts/${name}` };
+}
 
 // ---- shared publish logic (used by immediate publish AND the scheduler) ----
 // Fills post.results for each platform and returns the list of failures.

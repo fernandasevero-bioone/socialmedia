@@ -184,7 +184,7 @@ function renderApp() {
       <div id="viewRoot"></div>
     </div>`;
   document.getElementById('logoutBtn').onclick = async () => { await api.post('/logout'); state.user=null; renderLogin(); };
-  app.querySelectorAll('.tab').forEach(b => b.onclick = () => { state.view = b.dataset.v; state.editing = null; renderView(); });
+  app.querySelectorAll('.tab').forEach(b => b.onclick = () => { state.view = b.dataset.v; state.editing = null; state.tplForm = null; renderView(); });
   renderView();
 }
 
@@ -208,9 +208,25 @@ function renderView() {
 // ---------- library ----------
 function renderLibrary(root) {
   root.innerHTML = '';
+
+  // header row with the "create your own post" action
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px;';
+  header.innerHTML = `<h2 style="margin:0;">Content Library</h2>
+    <button class="btn btn-primary" id="ownPostBtn">➕ Create your own post</button>`;
+  root.appendChild(header);
+  header.querySelector('#ownPostBtn').onclick = () => {
+    state.editing = { custom: true, libraryId: null, caption: '', image: '', media: [],
+      category: '', platforms: [], perPlatform: false, captions: {} };
+    renderView();
+  };
+
   if (!connectedCount()) {
-    root.innerHTML = `<div class="muted-note" style="margin-bottom:18px;">
-      👋 You haven't connected any accounts yet. Head to <b>My Accounts</b> to connect, then publish from here.</div>`;
+    const note = document.createElement('div');
+    note.className = 'muted-note';
+    note.style.marginBottom = '18px';
+    note.innerHTML = `👋 You haven't connected any accounts yet. Head to <b>My Accounts</b> to connect, then publish from here.`;
+    root.appendChild(note);
   }
 
   // category filter bar
@@ -278,9 +294,28 @@ function renderLibrary(root) {
 // ---------- composer ----------
 function renderComposer(root) {
   const e = state.editing;
-  if (!e.media || !e.media.length) e.media = [e.image];
+  if (!e.media) e.media = [];
+  if (!e.media.length && e.image) e.media = [e.image];
   const connected = state.platforms.filter(p => state.accounts[p.id]);
   const limitFor = id => platMeta(id).captionLimit || 9999;
+
+  // custom posts (franchisee's own) get a media uploader; library posts use template media
+  const ownUploader = e.custom ? `
+    <label class="alabel" style="display:block; font-weight:700; font-size:.85rem; margin-bottom:4px;">Your image or video</label>
+    <div class="uploader">
+      <div>
+        <button class="btn btn-blue" type="button" id="ownPick">📤 Add image or video</button>
+        <div class="subtle" style="font-size:.78rem; margin-top:6px;">Upload one or more. The first is the cover.</div>
+      </div>
+      <input type="file" id="ownFile" accept="image/*,video/*" multiple style="display:none;" />
+    </div>
+    <div id="ownMedia" class="media-list">
+      ${e.media.map((m,i)=>`<div class="media-item">
+        <div class="media-prev">${isVideo(m)?`<video src="${esc(m)}" muted></video>`:`<img src="${esc(m)}"/>`}</div>
+        ${i===0?'<span class="cover-tag">Cover</span>':`<button type="button" class="mini" data-own-cover="${i}" title="Make cover">★</button>`}
+        <button type="button" class="mini del" data-own-rm="${i}" title="Remove">✕</button>
+      </div>`).join('')}
+    </div>` : '';
 
   // caption editor: one shared box, or one per selected platform when toggled on
   const captionEditor = e.perPlatform
@@ -301,8 +336,10 @@ function renderComposer(root) {
     <button class="btn btn-ghost" id="backBtn" style="margin-bottom:18px;">← Back to library</button>
     <div class="grid" style="grid-template-columns: 1.3fr 1fr; align-items:start;">
       <div class="card"><div class="pad">
-        <h2>Customize your caption</h2>
-        <p class="subtle" style="font-size:.9rem;">Replace the [BRACKETS] with your location's details.</p>
+        <h2>${e.custom ? 'Create your own post' : 'Customize your caption'}</h2>
+        <p class="subtle" style="font-size:.9rem;">${e.custom ? 'Upload your media, write your caption, choose accounts, and publish or schedule.' : "Replace the [BRACKETS] with your location's details."}</p>
+
+        ${ownUploader}
 
         <label class="toggle">
           <input type="checkbox" id="ppToggle" ${e.perPlatform?'checked':''}/>
@@ -329,9 +366,11 @@ function renderComposer(root) {
       </div></div>
 
       <div class="card">
-        <div class="thumb">${isVideo(e.media[0])
-          ? `<video src="${esc(e.media[0])}" controls playsinline></video>`
-          : `<img src="${esc(e.media[0])}" onerror="this.parentNode.style.minHeight='220px'"/>`}</div>
+        <div class="thumb">${!e.media[0]
+          ? `<div style="color:#fff; text-align:center; padding:24px; font-weight:700;">Your image or video<br/>preview appears here</div>`
+          : isVideo(e.media[0])
+            ? `<video src="${esc(e.media[0])}" controls playsinline></video>`
+            : `<img src="${esc(e.media[0])}" onerror="this.parentNode.style.minHeight='220px'"/>`}</div>
         ${e.media.length > 1 ? `<div class="gallery">${galleryThumbs}</div>` : ''}
         <div class="pad"><span class="tag">Live preview</span>
           <p id="preview" style="white-space:pre-wrap; font-size:.92rem;"></p></div>
@@ -378,6 +417,28 @@ function renderComposer(root) {
   };
 
   document.getElementById('backBtn').onclick = () => { state.editing = null; renderView(); };
+
+  // custom-post media uploader
+  if (e.custom) {
+    const ownFile = document.getElementById('ownFile');
+    document.getElementById('ownPick').onclick = () => ownFile.click();
+    ownFile.onchange = async ev => {
+      const files = [...ev.target.files]; if (!files.length) return;
+      toast(`Uploading ${files.length} file(s)…`);
+      for (const file of files) {
+        const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
+        try { const { image } = await api.post('/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl }); e.media.push(image); }
+        catch (err) { toast(err.error || 'Upload failed'); }
+      }
+      renderComposer(root);
+      toast('Upload complete');
+    };
+    root.querySelectorAll('button[data-own-rm]').forEach(b => b.onclick = () => { e.media.splice(+b.dataset.ownRm, 1); renderComposer(root); });
+    root.querySelectorAll('button[data-own-cover]').forEach(b => b.onclick = () => {
+      const i = +b.dataset.ownCover; const [m] = e.media.splice(i, 1); e.media.unshift(m); renderComposer(root);
+    });
+  }
+
   root.querySelectorAll('button[data-p]').forEach(b => b.onclick = () => {
     const id = b.dataset.p;
     e.platforms = e.platforms.includes(id) ? e.platforms.filter(x=>x!==id) : [...e.platforms, id];
@@ -661,16 +722,14 @@ function openPostModal(post, onChange) {
   }
 }
 
-// ---------- admin (corporate only) ----------
 function blankDraft() {
   return { id: null, title: '', category: '', caption: '', image: '', media: [],
     platforms: ['facebook','instagram','linkedin'] };
 }
 
+// ---------- admin (corporate only): sign-ups + notifications ----------
 async function renderAdmin(root) {
   if (state.user.role !== 'admin') { state.view = 'library'; return renderView(); }
-
-  const cats = state.categories || [];
   const [{ users }, { outbox }] = await Promise.all([ api.get('/admin/users'), api.get('/admin/outbox') ]);
   const signups = users.filter(u => u.role !== 'admin');
   const signupRows = signups.length ? signups
@@ -679,7 +738,7 @@ async function renderAdmin(root) {
       <div class="conn-left"><b>${esc(u.email)}</b> <span class="subtle">— ${esc(u.name)}, ${esc(u.location)}</span></div>
       <span class="subtle" style="font-size:.8rem;">${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : ''}</span>
     </div>`).join('') : '<p class="subtle" style="font-size:.88rem;">No franchisee sign-ups yet.</p>';
-  const outboxRows = outbox.length ? outbox.slice(0, 10).map(m => `
+  const outboxRows = outbox.length ? outbox.slice(0, 20).map(m => `
     <div class="conn-row"><div class="conn-left">
       <span class="badge no">✉️</span>
       <div><b style="font-size:.9rem;">${esc(m.to)}</b><div class="subtle" style="font-size:.8rem;">${esc(m.subject)}</div></div>
@@ -688,41 +747,134 @@ async function renderAdmin(root) {
 
   root.innerHTML = `
     <div class="admin-stack">
-    <div class="card" style="margin-bottom:18px;"><div class="pad">
-      <h2 style="font-size:1.1rem;">👥 Franchisee sign-ups <span class="subtle" style="font-weight:400;">(${signups.length})</span></h2>
-      <p class="subtle" style="font-size:.88rem;">Everyone who created an account. Use it to track adoption or export your mailing list.</p>
-      <div style="max-height:260px; overflow:auto;">${signupRows}</div>
-    </div></div>
-
-    <div class="card" style="margin-bottom:18px;"><div class="pad">
-      <h2 style="font-size:1.1rem;">✉️ Notifications sent</h2>
-      <p class="subtle" style="font-size:.88rem;">Failure alerts emailed to franchisees. (Demo mode logs them here; connect an email provider to deliver for real.)</p>
-      <div style="max-height:220px; overflow:auto;">${outboxRows}</div>
-    </div></div>
-
-    <div class="card" style="margin-bottom:18px;"><div class="pad">
-      <h2 style="font-size:1.1rem;">🏷️ Categories</h2>
-      <p class="subtle" style="font-size:.88rem;">These power the filter franchisees see in the Content Library, and the category picker below. Edit or delete existing templates under the <b>Templates</b> tab.</p>
-      <form id="catForm" style="display:flex; gap:10px; margin:10px 0 4px; flex-wrap:wrap;">
-        <input name="newCat" placeholder="New category name (e.g. Did You Know)" style="flex:1; min-width:200px; padding:10px; border:1.5px solid var(--bo-gray-light); border-radius:9px; font-family:inherit; font-size:.95rem;" />
-        <button class="btn btn-primary" type="submit">Add category</button>
-      </form>
-      <div class="cat-list" id="catList">
-        ${cats.length ? cats.map(c => `
-          <span class="cat-pill">
-            <span>${esc(c)}</span>
-            <button data-edit-cat="${esc(c)}" title="Rename">✎</button>
-            <button data-del-cat="${esc(c)}" title="Delete">✕</button>
-          </span>`).join('') : '<span class="subtle" style="font-size:.88rem;">No categories yet — add your first above.</span>'}
-      </div>
-    </div></div>
+      <div class="card" style="margin-bottom:18px;"><div class="pad">
+        <h2 style="font-size:1.1rem;">👥 Franchisee sign-ups <span class="subtle" style="font-weight:400;">(${signups.length})</span></h2>
+        <p class="subtle" style="font-size:.88rem;">Everyone who created an account. Use it to track adoption or export your mailing list. Manage templates &amp; categories under the <b>🗂️ Templates</b> tab.</p>
+        <div style="max-height:320px; overflow:auto;">${signupRows}</div>
+      </div></div>
 
       <div class="card"><div class="pad">
-        <h2 id="formTitle">➕ Add a template to the library</h2>
-        <p class="subtle" style="font-size:.9rem;">Upload a design and caption here. It instantly appears in every franchisee's Content Library, ready for them to customize and publish. Use [BRACKETS] for details each location fills in (e.g. [CITY], [YOUR PHONE]).</p>
+        <h2 style="font-size:1.1rem;">✉️ Notifications sent</h2>
+        <p class="subtle" style="font-size:.88rem;">Failure alerts emailed to franchisees. (Demo mode logs them here; connect an email provider to deliver for real.)</p>
+        <div style="max-height:320px; overflow:auto;">${outboxRows}</div>
+      </div></div>
+    </div>`;
+}
+
+// ---------- templates (corporate only): categories + list, with create/edit form ----------
+async function renderTemplates(root) {
+  if (state.user.role !== 'admin') { state.view = 'library'; return renderView(); }
+  if (state.tplForm) return renderTemplateForm(root);
+
+  await refreshLibrary();
+  const posts = state.library;
+  const cats = state.categories || [];
+  if (!state.tplFilter || (state.tplFilter !== '__all' && !cats.includes(state.tplFilter))) state.tplFilter = '__all';
+  const active = state.tplFilter;
+  const visible = active === '__all' ? posts : posts.filter(p => p.category === active);
+
+  root.innerHTML = `
+    <div class="admin-stack">
+      <div class="card" style="margin-bottom:18px;"><div class="pad">
+        <h2 style="font-size:1.1rem;">🏷️ Categories</h2>
+        <p class="subtle" style="font-size:.88rem;">These power the filter franchisees see in the Content Library, and the category picker on each template.</p>
+        <form id="catForm" style="display:flex; gap:10px; margin:10px 0 4px; flex-wrap:wrap;">
+          <input name="newCat" placeholder="New category name" style="flex:1; min-width:200px; padding:10px; border:1.5px solid var(--bo-gray-light); border-radius:9px; font-family:inherit; font-size:.95rem;" />
+          <button class="btn btn-primary" type="submit">Add category</button>
+        </form>
+        <div class="cat-list" id="catList">
+          ${cats.length ? cats.map(c => `
+            <span class="cat-pill">
+              <span>${esc(c)}</span>
+              <button data-edit-cat="${esc(c)}" title="Rename">✎</button>
+              <button data-del-cat="${esc(c)}" title="Delete">✕</button>
+            </span>`).join('') : '<span class="subtle" style="font-size:.88rem;">No categories yet — add your first above.</span>'}
+        </div>
+      </div></div>
+
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+        <h2 style="margin:0;">Templates <span class="subtle" style="font-weight:400;">(${posts.length})</span></h2>
+        <button class="btn btn-primary" id="newTplBtn">➕ New template</button>
+      </div>
+      <div class="filter-bar">
+        <span class="filter-label">Filter:</span>
+        <button class="filter-chip ${active==='__all'?'on':''}" data-tcat="__all">All</button>
+        ${cats.map(c => `<button class="filter-chip ${active===c?'on':''}" data-tcat="${esc(c)}">${esc(c)}</button>`).join('')}
+      </div>
+      <div id="tplList">${visible.length ? '' : '<div class="muted-note">No templates here yet.</div>'}</div>
+    </div>`;
+
+  // category management
+  document.getElementById('catForm').onsubmit = async e => {
+    e.preventDefault();
+    const name = e.target.newCat.value.trim();
+    if (!name) return;
+    try { const r = await api.post('/admin/categories', { name }); state.categories = r.categories; toast('Category added'); renderTemplates(root); }
+    catch (err) { toast(err.error || 'Could not add category'); }
+  };
+  root.querySelectorAll('button[data-edit-cat]').forEach(b => b.onclick = async () => {
+    const oldName = b.dataset.editCat;
+    const newName = prompt('Rename category:', oldName);
+    if (newName === null || newName.trim() === oldName) return;
+    try { const r = await api.post('/admin/categories/rename', { oldName, newName: newName.trim() }); state.categories = r.categories; await refreshLibrary(); toast('Category renamed'); renderTemplates(root); }
+    catch (err) { toast(err.error || 'Rename failed'); }
+  });
+  root.querySelectorAll('button[data-del-cat]').forEach(b => b.onclick = async () => {
+    const name = b.dataset.delCat;
+    if (!confirm(`Delete category "${name}"? Posts using it become Uncategorized.`)) return;
+    try { const r = await api.post('/admin/categories/delete', { name }); state.categories = r.categories; await refreshLibrary(); toast('Category deleted'); renderTemplates(root); }
+    catch (err) { toast(err.error || 'Delete failed'); }
+  });
+
+  document.getElementById('newTplBtn').onclick = () => { state.tplForm = blankDraft(); renderTemplates(root); };
+  root.querySelectorAll('button[data-tcat]').forEach(b => b.onclick = () => { state.tplFilter = b.dataset.tcat; renderTemplates(root); });
+
+  const list = document.getElementById('tplList');
+  list.innerHTML = visible.map(post => `
+    <div class="card" style="margin-bottom:12px;"><div class="pad" style="display:flex; gap:12px; align-items:flex-start;">
+      <div class="tpl-thumb">${mediaThumb(post.image, post.title)}</div>
+      <div style="flex:1; min-width:0;">
+        ${post.category ? `<span class="tag">${esc(post.category)}</span>` : `<span class="tag" style="background:#EBECEF; color:var(--bo-gray);">Uncategorized</span>`}
+        <div style="font-weight:700; overflow-wrap:anywhere;">${esc(post.title)}</div>
+        <div class="subtle clamp-2" style="font-size:.85rem;">${esc(post.caption)}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <button class="btn btn-ghost" style="padding:6px 14px;" data-edit="${post.id}">Edit</button>
+        <button class="btn btn-ghost" style="padding:6px 14px; color:#E62A65; border-color:#f5c2d3;" data-del="${post.id}">Delete</button>
+      </div>
+    </div></div>`).join('') || list.innerHTML;
+
+  list.querySelectorAll('button[data-edit]').forEach(b => b.onclick = () => {
+    const post = posts.find(p => p.id === b.dataset.edit);
+    state.tplForm = { id: post.id, title: post.title, category: post.category,
+      caption: post.caption, image: post.image,
+      media: (post.media && post.media.length) ? [...post.media] : (post.image ? [post.image] : []),
+      platforms: [...post.platforms] };
+    renderTemplates(root);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  list.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete this template from the library?')) return;
+    try { await api.post('/admin/library/delete', { id: b.dataset.del }); toast('Template deleted'); renderTemplates(root); }
+    catch (err) { toast(err.error || 'Delete failed'); }
+  });
+}
+
+// the create/edit template form (shown inside Templates when adding/editing)
+function renderTemplateForm(root) {
+  const cats = state.categories || [];
+  let draft = state.tplForm;
+  if (!draft.media) draft.media = draft.image ? [draft.image] : [];
+
+  root.innerHTML = `
+    <div class="admin-stack">
+      <button class="btn btn-ghost" id="tplBack" style="margin-bottom:14px;">← Back to templates</button>
+      <div class="card"><div class="pad">
+        <h2 id="formTitle">${draft.id ? '✏️ Edit template' : '➕ Add a template to the library'}</h2>
+        <p class="subtle" style="font-size:.9rem;">It instantly appears in every franchisee's Content Library, ready for them to customize and publish. Use [BRACKETS] for details each location fills in (e.g. [CITY], [YOUR PHONE]).</p>
         <form id="adminForm">
           <label class="alabel">1. Upload designs (images or video)</label>
-          <div class="uploader" id="dropZone">
+          <div class="uploader">
             <div>
               <button class="btn btn-blue" type="button" id="pickFileBtn">📤 Add image or video</button>
               <div class="subtle" style="font-size:.78rem; margin-top:6px;">Add one or several. The first is the cover. Images: PNG, JPG, SVG. Videos: MP4, WEBM, MOV.</div>
@@ -745,41 +897,15 @@ async function renderAdmin(root) {
           </div>
           <div style="display:flex; gap:10px; margin-top:20px;">
             <button class="btn btn-primary" type="submit">Save to library</button>
-            <button class="btn btn-ghost" type="button" id="resetBtn">Clear</button>
+            <button class="btn btn-ghost" type="button" id="cancelTpl">Cancel</button>
           </div>
         </form>
       </div></div>
     </div>`;
 
-  // style hook for labels
   root.querySelectorAll('.alabel').forEach(l => { l.style.cssText = 'display:block; font-weight:700; font-size:.85rem; margin-top:14px;'; });
   root.querySelectorAll('.alabel input, .alabel textarea, .alabel select').forEach(i => { i.style.cssText = 'width:100%; margin-top:5px; padding:10px; border:1.5px solid #BDBDBF; border-radius:9px; font-family:inherit; font-size:.95rem; background:#fff;'; });
 
-  // ---- category management ----
-  document.getElementById('catForm').onsubmit = async e => {
-    e.preventDefault();
-    const name = e.target.newCat.value.trim();
-    if (!name) return;
-    try { const r = await api.post('/admin/categories', { name }); state.categories = r.categories; toast('Category added'); renderAdmin(root); }
-    catch (err) { toast(err.error || 'Could not add category'); }
-  };
-  root.querySelectorAll('button[data-edit-cat]').forEach(b => b.onclick = async () => {
-    const oldName = b.dataset.editCat;
-    const newName = prompt('Rename category:', oldName);
-    if (newName === null || newName.trim() === oldName) return;
-    try { const r = await api.post('/admin/categories/rename', { oldName, newName: newName.trim() }); state.categories = r.categories; await refreshLibrary(); toast('Category renamed'); renderAdmin(root); }
-    catch (err) { toast(err.error || 'Rename failed'); }
-  });
-  root.querySelectorAll('button[data-del-cat]').forEach(b => b.onclick = async () => {
-    const name = b.dataset.delCat;
-    if (!confirm(`Delete category "${name}"? Posts using it become Uncategorized.`)) return;
-    try { const r = await api.post('/admin/categories/delete', { name }); state.categories = r.categories; await refreshLibrary(); toast('Category deleted'); renderAdmin(root); }
-    catch (err) { toast(err.error || 'Delete failed'); }
-  });
-
-  let draft = state.adminDraft || blankDraft();
-  if (!draft.media) draft.media = draft.image ? [draft.image] : [];
-  state.adminDraft = null;
   const form = document.getElementById('adminForm');
   const mediaList = document.getElementById('mediaList');
 
@@ -799,9 +925,7 @@ async function renderAdmin(root) {
   }
 
   function fillForm() {
-    form.title.value = draft.title; form.category.value = draft.category;
-    form.caption.value = draft.caption;
-    document.getElementById('formTitle').textContent = draft.id ? '✏️ Edit template' : '➕ Add a template to the library';
+    form.title.value = draft.title; form.category.value = draft.category; form.caption.value = draft.caption;
     renderMediaList();
     root.querySelectorAll('#adminPlats .chip').forEach(c => {
       const on = draft.platforms.includes(c.dataset.p);
@@ -834,7 +958,9 @@ async function renderAdmin(root) {
     toast('Upload complete');
   };
 
-  document.getElementById('resetBtn').onclick = () => { draft = blankDraft(); fillForm(); };
+  const back = () => { state.tplForm = null; renderTemplates(root); };
+  document.getElementById('tplBack').onclick = back;
+  document.getElementById('cancelTpl').onclick = back;
 
   form.onsubmit = async e => {
     e.preventDefault();
@@ -845,67 +971,10 @@ async function renderAdmin(root) {
       await api.post('/admin/library', payload);
       await refreshLibrary();
       toast(wasEditing ? 'Template updated' : 'Template added to library');
-      state.adminDraft = null;
-      if (wasEditing) { state.view = 'templates'; renderView(); } // back to the list
-      else renderAdmin(root);                                     // clear form to add another
+      state.tplForm = null;
+      renderTemplates(root);
     } catch (err) { toast(err.error || 'Save failed'); }
   };
-}
-
-// ---------- templates (corporate only): edit & delete existing templates ----------
-async function renderTemplates(root) {
-  if (state.user.role !== 'admin') { state.view = 'library'; return renderView(); }
-  await refreshLibrary();
-  const posts = state.library;
-  const cats = state.categories || [];
-  if (!state.tplFilter || (state.tplFilter !== '__all' && !cats.includes(state.tplFilter))) state.tplFilter = '__all';
-  const active = state.tplFilter;
-  const visible = active === '__all' ? posts : posts.filter(p => p.category === active);
-
-  root.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
-      <h2 style="margin:0;">Templates <span class="subtle" style="font-weight:400;">(${posts.length})</span></h2>
-      <button class="btn btn-primary" id="newTplBtn">➕ New template</button>
-    </div>
-    <div class="filter-bar">
-      <span class="filter-label">Filter:</span>
-      <button class="filter-chip ${active==='__all'?'on':''}" data-tcat="__all">All</button>
-      ${cats.map(c => `<button class="filter-chip ${active===c?'on':''}" data-tcat="${esc(c)}">${esc(c)}</button>`).join('')}
-    </div>
-    <div id="tplList">${visible.length ? '' : '<div class="muted-note">No templates here yet.</div>'}</div>`;
-
-  document.getElementById('newTplBtn').onclick = () => { state.adminDraft = null; state.view = 'admin'; renderView(); };
-  root.querySelectorAll('button[data-tcat]').forEach(b => b.onclick = () => { state.tplFilter = b.dataset.tcat; renderTemplates(root); });
-
-  const list = document.getElementById('tplList');
-  list.innerHTML = visible.map(post => `
-    <div class="card" style="margin-bottom:12px;"><div class="pad" style="display:flex; gap:12px; align-items:flex-start;">
-      <div class="tpl-thumb">${mediaThumb(post.image, post.title)}</div>
-      <div style="flex:1; min-width:0;">
-        ${post.category ? `<span class="tag">${esc(post.category)}</span>` : `<span class="tag" style="background:#EBECEF; color:var(--bo-gray);">Uncategorized</span>`}
-        <div style="font-weight:700; overflow-wrap:anywhere;">${esc(post.title)}</div>
-        <div class="subtle clamp-2" style="font-size:.85rem;">${esc(post.caption)}</div>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <button class="btn btn-ghost" style="padding:6px 14px;" data-edit="${post.id}">Edit</button>
-        <button class="btn btn-ghost" style="padding:6px 14px; color:#E62A65; border-color:#f5c2d3;" data-del="${post.id}">Delete</button>
-      </div>
-    </div></div>`).join('') || list.innerHTML;
-
-  list.querySelectorAll('button[data-edit]').forEach(b => b.onclick = () => {
-    const post = posts.find(p => p.id === b.dataset.edit);
-    state.adminDraft = { id: post.id, title: post.title, category: post.category,
-      caption: post.caption, image: post.image,
-      media: (post.media && post.media.length) ? [...post.media] : (post.image ? [post.image] : []),
-      platforms: [...post.platforms] };
-    state.view = 'admin'; renderView();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-  list.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
-    if (!confirm('Delete this template from the library?')) return;
-    try { await api.post('/admin/library/delete', { id: b.dataset.del }); toast('Template deleted'); renderTemplates(root); }
-    catch (err) { toast(err.error || 'Delete failed'); }
-  });
 }
 
 boot();

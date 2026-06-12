@@ -173,7 +173,7 @@ textarea:focus { outline:none; border-color: var(--bo-blue); }
 .uploader { display:flex; align-items:center; gap:14px; margin-top:6px; padding:14px; border:2px dashed var(--bo-gray-light); border-radius:12px; background:#FAFBFC; }
 .media-prev { width:72px; height:72px; border-radius:8px; overflow:hidden; background:#EBECEF; flex-shrink:0; }
 .media-prev img, .media-prev video { width:100%; height:100%; object-fit:cover; display:block; }
-.admin-stack { max-width: 720px; } /* keep the admin form a comfortable, balanced width */
+.admin-stack { max-width: 100%; } /* full width of the content area */
 .tpl-thumb { width:56px; height:56px; border-radius:8px; overflow:hidden; flex-shrink:0; background:#EBECEF; position:relative; }
 .tpl-thumb img, .tpl-thumb video { width:100%; height:100%; object-fit:cover; display:block; }
 .tpl-thumb .play-badge { position:absolute; inset:0; margin:auto; width:24px; height:24px; border-radius:50%; background:rgba(0,0,0,.5); color:#fff; display:grid; place-items:center; font-size:10px; }
