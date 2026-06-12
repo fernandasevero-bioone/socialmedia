@@ -80,6 +80,10 @@ header.topnav {
 /* Cards */
 .grid { display: grid; gap: 18px; }
 .grid-3 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1040px){ .grid-4 { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 760px){ .grid-4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px){ .grid-4 { grid-template-columns: 1fr; } }
 .card {
   background: var(--bo-white); border-radius: var(--radius);
   box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;

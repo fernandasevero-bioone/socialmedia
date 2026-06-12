@@ -228,7 +228,7 @@ function renderLibrary(root) {
   }
 
   const grid = document.createElement('div');
-  grid.className = 'grid grid-3';
+  grid.className = 'grid grid-4';
   grid.innerHTML = visible.map(post => `
     <div class="card">
       <div class="thumb"><img src="${esc(post.image)}" alt="${esc(post.title)}" onerror="this.style.display='none'"/></div>
@@ -250,7 +250,7 @@ function renderLibrary(root) {
   grid.querySelectorAll('button[data-id]').forEach(b => b.onclick = () => {
     const post = state.library.find(p => p.id === b.dataset.id);
     state.editing = { libraryId: post.id, caption: post.caption, image: post.image,
-      platforms: post.platforms.filter(t => state.accounts[t]) };
+      category: post.category || '', platforms: post.platforms.filter(t => state.accounts[t]) };
     renderView();
   });
   grid.querySelectorAll('button[data-dl]').forEach(b => b.onclick = () => {
@@ -323,7 +323,7 @@ function renderComposer(root) {
   const publish = async (scheduledFor) => {
     if (!e.platforms.length) return toast('Pick at least one account');
     try {
-      const { post } = await api.post('/publish', { libraryId: e.libraryId, caption: e.caption, platforms: e.platforms, scheduledFor });
+      const { post } = await api.post('/publish', { libraryId: e.libraryId, caption: e.caption, category: e.category || '', platforms: e.platforms, scheduledFor });
       toast(scheduledFor ? '🗓️ Scheduled!' : '✅ Published to ' + e.platforms.length + ' account(s)');
       state.editing = null; state.view = 'history'; renderView();
     } catch (err) { toast(err.error || 'Publish failed'); }
@@ -403,9 +403,15 @@ async function renderCalendar(root) {
   root.innerHTML = `<p class="subtle">Loading…</p>`;
   const { posts } = await api.get('/posts');
 
+  // category of a post (stored on newer posts; fall back to its library template)
+  const catOf = p => p.category || (state.library.find(l => l.id === p.libraryId) || {}).category || '';
+  const usedCats = [...new Set(posts.map(catOf).filter(Boolean))];
+  const active = (state.calFilter === '__all' || usedCats.includes(state.calFilter)) ? state.calFilter : '__all';
+  const fposts = active === '__all' ? posts : posts.filter(p => catOf(p) === active);
+
   // group posts by local YYYY-MM-DD (scheduled use their date; published use posted date)
   const byDay = {};
-  posts.forEach(p => {
+  fposts.forEach(p => {
     const d = new Date(p.scheduledFor || p.createdAt);
     const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     (byDay[key] = byDay[key] || []).push(p);
@@ -417,7 +423,7 @@ async function renderCalendar(root) {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
-  const scheduledCount = posts.filter(p => p.status === 'scheduled' && new Date(p.scheduledFor) >= new Date(today.toDateString())).length;
+  const scheduledCount = fposts.filter(p => p.status === 'scheduled' && new Date(p.scheduledFor) >= new Date(today.toDateString())).length;
 
   let cells = '';
   for (let i = 0; i < firstDay; i++) cells += `<div class="cal-cell empty"></div>`;
@@ -446,6 +452,11 @@ async function renderCalendar(root) {
         <button class="btn btn-ghost" id="calNext" style="padding:8px 14px;">→</button>
       </div>
     </div>
+    ${usedCats.length ? `<div class="filter-bar">
+      <span class="filter-label">Filter:</span>
+      <button class="filter-chip ${active==='__all'?'on':''}" data-cal-cat="__all">All</button>
+      ${usedCats.map(c => `<button class="filter-chip ${active===c?'on':''}" data-cal-cat="${esc(c)}">${esc(c)}</button>`).join('')}
+    </div>` : ''}
     <div class="cal-legend">
       <span><i style="background:var(--bo-orange)"></i> Scheduled</span>
       <span><i style="background:var(--bo-teal)"></i> Published</span>
@@ -459,6 +470,10 @@ async function renderCalendar(root) {
   document.getElementById('calPrev').onclick  = () => { state.calMonth = new Date(year, month - 1, 1); renderCalendar(root); };
   document.getElementById('calNext').onclick  = () => { state.calMonth = new Date(year, month + 1, 1); renderCalendar(root); };
   document.getElementById('calToday').onclick = () => { state.calMonth = new Date(today.getFullYear(), today.getMonth(), 1); renderCalendar(root); };
+
+  root.querySelectorAll('button[data-cal-cat]').forEach(b => b.onclick = () => {
+    state.calFilter = b.dataset.calCat; renderCalendar(root);
+  });
 
   root.querySelectorAll('button[data-ev]').forEach(b => b.onclick = () => {
     const post = posts.find(p => p.id === b.dataset.ev);

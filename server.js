@@ -207,7 +207,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true });
     }
     if (p === '/api/publish' && req.method === 'POST') {
-      const { libraryId, caption, platforms: targets, scheduledFor } = await readBody(req);
+      const { libraryId, caption, category, platforms: targets, scheduledFor } = await readBody(req);
       const connected = store.getAccounts(user.id);
       const chosen = (targets || []).filter(t => connected[t]);
       if (!chosen.length) return send(res, 400, { error: 'No connected accounts selected' });
@@ -217,6 +217,7 @@ const server = http.createServer(async (req, res) => {
         franchiseeId: user.id,
         libraryId: libraryId || null,
         caption,
+        category: category || '',
         platforms: chosen,
         status: scheduledFor ? 'scheduled' : 'published',
         scheduledFor: scheduledFor || null,
