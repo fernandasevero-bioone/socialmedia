@@ -1,5 +1,6 @@
 {
-  "_comment": "Corporate-curated post library. Categories mirror the Bio-One Brand Guide p.36 (Social Media Posts & Concepts). Franchisees pick a post, tweak the caption (location/phone/dates), and publish. Replace placeholder image fields with real Canva exports from the Bio-One Branding kit.",
+  "_comment": "Corporate-curated post library. Categories are managed by corporate in the Admin tab. Franchisees pick a post, tweak the caption (location/phone/dates), and publish. Replace placeholder image fields with real Canva exports from the Bio-One Branding kit.",
+  "categories": ["Did You Know", "Community", "Announcement", "Client Review", "Cleaning Tip", "Warning", "World Holiday Greetings", "Infographic"],
   "posts": [
     {
       "id": "lib-didyouknow-odor",

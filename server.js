@@ -117,6 +117,9 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/library') {
       return send(res, 200, { posts: library.all() });
     }
+    if (p === '/api/categories') {
+      return send(res, 200, { categories: library.categories() });
+    }
 
     // ---- Admin (corporate only): manage the shared content library ----
     if (p.startsWith('/api/admin/')) {
@@ -131,6 +134,21 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/admin/library/delete' && req.method === 'POST') {
         const { id } = await readBody(req);
         return library.remove(id) ? send(res, 200, { ok: true }) : send(res, 404, { error: 'post not found' });
+      }
+      if (p === '/api/admin/categories' && req.method === 'POST') {
+        const { name } = await readBody(req);
+        const r = library.addCategory(name);
+        return r.error ? send(res, 400, r) : send(res, 200, r);
+      }
+      if (p === '/api/admin/categories/rename' && req.method === 'POST') {
+        const { oldName, newName } = await readBody(req);
+        const r = library.renameCategory(oldName, newName);
+        return r.error ? send(res, 400, r) : send(res, 200, r);
+      }
+      if (p === '/api/admin/categories/delete' && req.method === 'POST') {
+        const { name } = await readBody(req);
+        const r = library.removeCategory(name);
+        return r.error ? send(res, 400, r) : send(res, 200, r);
       }
       if (p === '/api/admin/upload' && req.method === 'POST') {
         // Accepts { filename, dataUrl } where dataUrl is a base64 data URI.

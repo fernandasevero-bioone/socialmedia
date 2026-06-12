@@ -1,4 +1,4 @@
-# Bio-One Social
+# Bio-One Social Hub
 
 A franchisee social-media publishing tool for Bio-One. Each franchisee
 connects **their own** social accounts, browses a corporate-curated content
@@ -29,9 +29,10 @@ No dependencies to install — it runs on the Node standard library.
   full forgot/reset-password flow (reset links are shown in-app in demo
   mode; wire an email provider for production)
 - ✅ Connect / disconnect each of the 6 platforms
-- ✅ Content library with 8 starter posts in your brand's categories
-  (Did You Know, Community, Announcement, Client Review, Tip, Warning,
-  Holiday, Infographic — straight from brand guide p.36)
+- ✅ Content library with 8 starter posts, filterable by category
+- ✅ **Corporate-managed categories** — corporate adds/renames/deletes the
+  categories (Admin tab); renames cascade to existing posts. Franchisees use
+  them as a filter in the Content Library
 - ✅ Caption editor with live preview + per-platform character-limit warnings
   (e.g. X's 280-char cap)
 - ✅ Publish now or schedule

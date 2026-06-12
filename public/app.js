@@ -33,8 +33,13 @@ async function boot() {
 }
 
 async function loadData() {
-  const [pl, lib, acc] = await Promise.all([ api.get('/platforms'), api.get('/library'), api.get('/accounts') ]);
-  state.platforms = pl.platforms; state.library = lib.posts; state.accounts = acc.accounts;
+  const [pl, lib, acc, cat] = await Promise.all([ api.get('/platforms'), api.get('/library'), api.get('/accounts'), api.get('/categories') ]);
+  state.platforms = pl.platforms; state.library = lib.posts; state.accounts = acc.accounts; state.categories = cat.categories;
+}
+
+async function refreshLibrary() {
+  const [lib, cat] = await Promise.all([ api.get('/library'), api.get('/categories') ]);
+  state.library = lib.posts; state.categories = cat.categories;
 }
 
 // ---------- login / signup / forgot / reset ----------
@@ -43,7 +48,7 @@ function authShell(inner) {
     <div class="login-wrap">
       <form class="login-card" id="authForm">
         <div class="logo" style="font-size:1.5rem;"><img class="mark" src="/favicon.svg" alt="Bio-One" />
-          <div>Bio-One Social<small>Help First, Business Second.</small></div></div>
+          <div>Bio-One Social Hub</div></div>
         ${inner}
       </form>
     </div>`;
@@ -101,7 +106,7 @@ function renderSignup() {
         email: f.get('email'), password: f.get('password')
       });
       state.user = user; await loadData();
-      toast('Welcome to Bio-One Social, ' + user.name.split(' ')[0] + '!');
+      toast('Welcome to Bio-One Social Hub, ' + user.name.split(' ')[0] + '!');
       renderApp();
     } catch (err) { toast(err.error || 'Could not create account'); }
   };
@@ -156,7 +161,7 @@ function renderReset(token) {
 function renderApp() {
   app.innerHTML = `
     <header class="topnav">
-      <div class="logo"><img class="mark" src="/favicon.svg" alt="Bio-One" /><div>Bio-One Social<small>${esc(state.user.location)}</small></div></div>
+      <div class="logo"><img class="mark" src="/favicon.svg" alt="Bio-One" /><div>Bio-One Social Hub</div></div>
       <div style="display:flex; align-items:center; gap:14px;">
         <span class="subtle">${esc(state.user.name)}</span>
         <button class="btn btn-ghost" id="logoutBtn">Sign out</button>
@@ -191,17 +196,44 @@ function renderView() {
 
 // ---------- library ----------
 function renderLibrary(root) {
+  root.innerHTML = '';
   if (!connectedCount()) {
     root.innerHTML = `<div class="muted-note" style="margin-bottom:18px;">
       👋 You haven't connected any accounts yet. Head to <b>My Accounts</b> to connect, then publish from here.</div>`;
-  } else { root.innerHTML = ''; }
+  }
+
+  // category filter bar
+  const cats = state.categories || [];
+  if (state.libFilter && state.libFilter !== '__all' && !cats.includes(state.libFilter)) state.libFilter = '__all';
+  const active = state.libFilter || '__all';
+  const filterBar = document.createElement('div');
+  filterBar.className = 'filter-bar';
+  filterBar.innerHTML = `<span class="filter-label">Filter:</span>
+    <button class="filter-chip ${active==='__all'?'on':''}" data-cat="__all">All</button>
+    ${cats.map(c => `<button class="filter-chip ${active===c?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}`;
+  root.appendChild(filterBar);
+  filterBar.querySelectorAll('button[data-cat]').forEach(b => b.onclick = () => {
+    state.libFilter = b.dataset.cat; renderLibrary(root);
+  });
+
+  const visible = active === '__all' ? state.library : state.library.filter(p => p.category === active);
+
+  if (!visible.length) {
+    const empty = document.createElement('div');
+    empty.className = 'muted-note';
+    empty.style.marginTop = '4px';
+    empty.textContent = active === '__all' ? 'No posts in the library yet.' : `No posts in "${active}" yet.`;
+    root.appendChild(empty);
+    return;
+  }
+
   const grid = document.createElement('div');
   grid.className = 'grid grid-3';
-  grid.innerHTML = state.library.map(post => `
+  grid.innerHTML = visible.map(post => `
     <div class="card">
       <div class="thumb"><img src="${esc(post.image)}" alt="${esc(post.title)}" onerror="this.style.display='none'"/></div>
       <div class="pad">
-        <span class="tag">${esc(post.category)}</span>
+        ${post.category ? `<span class="tag">${esc(post.category)}</span>` : ''}
         <h2 style="font-size:1.05rem;">${esc(post.title)}</h2>
         <p class="subtle" style="font-size:.9rem; max-height:3em; overflow:hidden;">${esc(post.caption)}</p>
         <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
@@ -507,9 +539,27 @@ async function renderAdmin(root) {
   if (state.user.role !== 'admin') { state.view = 'library'; return renderView(); }
   const { posts } = await api.get('/library');
 
+  const cats = state.categories || [];
   root.innerHTML = `
-    <div class="grid" style="grid-template-columns: 1fr 1.1fr; align-items:start;">
-      <div class="card"><div class="pad">
+    <div class="card" style="margin-bottom:18px;"><div class="pad">
+      <h2 style="font-size:1.1rem;">🏷️ Categories</h2>
+      <p class="subtle" style="font-size:.88rem;">These power the filter franchisees see in the Content Library, and the category picker below.</p>
+      <form id="catForm" style="display:flex; gap:10px; margin:10px 0 4px; flex-wrap:wrap;">
+        <input name="newCat" placeholder="New category name (e.g. Did You Know)" style="flex:1; min-width:200px; padding:10px; border:1.5px solid var(--bo-gray-light); border-radius:9px; font-family:inherit; font-size:.95rem;" />
+        <button class="btn btn-primary" type="submit">Add category</button>
+      </form>
+      <div class="cat-list" id="catList">
+        ${cats.length ? cats.map(c => `
+          <span class="cat-pill">
+            <span>${esc(c)}</span>
+            <button data-edit-cat="${esc(c)}" title="Rename">✎</button>
+            <button data-del-cat="${esc(c)}" title="Delete">✕</button>
+          </span>`).join('') : '<span class="subtle" style="font-size:.88rem;">No categories yet — add your first above.</span>'}
+      </div>
+    </div></div>
+
+    <div class="grid admin-grid">
+      <div class="card admin-col"><div class="pad">
         <h2 id="formTitle">➕ Add a template to the library</h2>
         <p class="subtle" style="font-size:.9rem;">Upload a design and caption here. It instantly appears in every franchisee's Content Library, ready for them to customize and publish. Use [BRACKETS] for details each location fills in (e.g. [CITY], [YOUR PHONE]).</p>
         <form id="adminForm">
@@ -524,8 +574,12 @@ async function renderAdmin(root) {
           </div>
           <input type="hidden" name="image" />
           <label class="alabel">2. Template name<input name="title" placeholder="e.g. Did You Know — Odor Removal" required /></label>
-          <label class="alabel">3. Category<input name="category" list="catlist" placeholder="e.g. Did You Know" /></label>
-          <datalist id="catlist">${[...new Set(posts.map(p=>p.category))].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+          <label class="alabel">3. Category
+            <select name="category">
+              <option value="">— Uncategorized —</option>
+              ${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+            </select>
+          </label>
           <label class="alabel">4. Default caption<textarea name="caption" style="min-height:120px;" placeholder="Write the caption franchisees start from…" required></textarea></label>
           <p class="alabel" style="margin-top:14px;">5. Available on</p>
           <div class="platforms" id="adminPlats">
@@ -538,15 +592,37 @@ async function renderAdmin(root) {
         </form>
       </div></div>
 
-      <div>
-        <h2 style="margin-bottom:12px;">Library posts <span class="subtle" style="font-weight:400;">(${posts.length})</span></h2>
+      <div class="admin-col">
+        <h2 style="margin:0 0 12px;">Library posts <span class="subtle" style="font-weight:400;">(${posts.length})</span></h2>
         <div id="adminList"></div>
       </div>
     </div>`;
 
   // style hook for labels
   root.querySelectorAll('.alabel').forEach(l => { l.style.cssText = 'display:block; font-weight:700; font-size:.85rem; margin-top:14px;'; });
-  root.querySelectorAll('.alabel input, .alabel textarea').forEach(i => { i.style.cssText = 'width:100%; margin-top:5px; padding:10px; border:1.5px solid #BDBDBF; border-radius:9px; font-family:inherit; font-size:.95rem;'; });
+  root.querySelectorAll('.alabel input, .alabel textarea, .alabel select').forEach(i => { i.style.cssText = 'width:100%; margin-top:5px; padding:10px; border:1.5px solid #BDBDBF; border-radius:9px; font-family:inherit; font-size:.95rem; background:#fff;'; });
+
+  // ---- category management ----
+  document.getElementById('catForm').onsubmit = async e => {
+    e.preventDefault();
+    const name = e.target.newCat.value.trim();
+    if (!name) return;
+    try { const r = await api.post('/admin/categories', { name }); state.categories = r.categories; toast('Category added'); renderAdmin(root); }
+    catch (err) { toast(err.error || 'Could not add category'); }
+  };
+  root.querySelectorAll('button[data-edit-cat]').forEach(b => b.onclick = async () => {
+    const oldName = b.dataset.editCat;
+    const newName = prompt('Rename category:', oldName);
+    if (newName === null || newName.trim() === oldName) return;
+    try { const r = await api.post('/admin/categories/rename', { oldName, newName: newName.trim() }); state.categories = r.categories; await refreshLibrary(); toast('Category renamed'); renderAdmin(root); }
+    catch (err) { toast(err.error || 'Rename failed'); }
+  });
+  root.querySelectorAll('button[data-del-cat]').forEach(b => b.onclick = async () => {
+    const name = b.dataset.delCat;
+    if (!confirm(`Delete category "${name}"? Posts using it become Uncategorized.`)) return;
+    try { const r = await api.post('/admin/categories/delete', { name }); state.categories = r.categories; await refreshLibrary(); toast('Category deleted'); renderAdmin(root); }
+    catch (err) { toast(err.error || 'Delete failed'); }
+  });
 
   let draft = state.adminDraft || blankDraft();
   state.adminDraft = null;
@@ -599,12 +675,12 @@ async function renderAdmin(root) {
 
   const list = document.getElementById('adminList');
   list.innerHTML = posts.map(post => `
-    <div class="card" style="margin-bottom:12px;"><div class="pad" style="display:flex; gap:12px;">
+    <div class="card" style="margin-bottom:12px;"><div class="pad" style="display:flex; gap:12px; align-items:flex-start;">
       <img src="${esc(post.image)}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; flex-shrink:0;" onerror="this.style.visibility='hidden'"/>
       <div style="flex:1; min-width:0;">
-        <span class="tag">${esc(post.category)}</span>
-        <div style="font-weight:700;">${esc(post.title)}</div>
-        <div class="subtle" style="font-size:.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(post.caption)}</div>
+        ${post.category ? `<span class="tag">${esc(post.category)}</span>` : `<span class="tag" style="background:#EBECEF; color:var(--bo-gray);">Uncategorized</span>`}
+        <div style="font-weight:700; overflow-wrap:anywhere;">${esc(post.title)}</div>
+        <div class="subtle clamp-2" style="font-size:.85rem;">${esc(post.caption)}</div>
       </div>
       <div style="display:flex; flex-direction:column; gap:6px;">
         <button class="btn btn-ghost" style="padding:6px 14px;" data-edit="${post.id}">Edit</button>
