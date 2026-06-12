@@ -16,6 +16,11 @@ function toast(msg) {
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const platMeta = id => state.platforms.find(p => p.id === id) || { name:id, color:'#7A7A80' };
+const isVideo = url => /\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(url || '');
+// markup for a media thumbnail (image or video) inside a .thumb container
+const mediaThumb = (url, alt) => isVideo(url)
+  ? `<video src="${esc(url)}" muted playsinline preload="metadata"></video><span class="play-badge">▶</span>`
+  : `<img src="${esc(url)}" alt="${esc(alt||'')}" onerror="this.style.display='none'"/>`;
 
 // ---------- bootstrap ----------
 async function boot() {
@@ -173,7 +178,8 @@ function renderApp() {
         <button class="tab ${state.view==='calendar'?'active':''}" data-v="calendar">📅 Calendar</button>
         <button class="tab ${state.view==='connections'?'active':''}" data-v="connections">My Accounts</button>
         <button class="tab ${state.view==='history'?'active':''}" data-v="history">History</button>
-        ${state.user.role === 'admin' ? `<button class="tab ${state.view==='admin'?'active':''}" data-v="admin">⚙️ Admin</button>` : ''}
+        ${state.user.role === 'admin' ? `<button class="tab ${state.view==='admin'?'active':''}" data-v="admin">⚙️ Admin</button>
+        <button class="tab ${state.view==='templates'?'active':''}" data-v="templates">🗂️ Templates</button>` : ''}
       </div>
       <div id="viewRoot"></div>
     </div>`;
@@ -192,6 +198,7 @@ function renderView() {
   if (state.view === 'connections') return renderConnections(root);
   if (state.view === 'history')     return renderHistory(root);
   if (state.view === 'admin')       return renderAdmin(root);
+  if (state.view === 'templates')   return renderTemplates(root);
 }
 
 // ---------- library ----------
@@ -231,12 +238,12 @@ function renderLibrary(root) {
   grid.className = 'grid grid-4';
   grid.innerHTML = visible.map(post => `
     <div class="card">
-      <div class="thumb"><img src="${esc(post.image)}" alt="${esc(post.title)}" onerror="this.style.display='none'"/></div>
+      <div class="thumb">${mediaThumb(post.image, post.title)}</div>
       <div class="pad">
         ${post.category ? `<span class="tag">${esc(post.category)}</span>` : ''}
-        <h2 style="font-size:1.05rem;">${esc(post.title)}</h2>
-        <p class="subtle" style="font-size:.9rem; max-height:3em; overflow:hidden;">${esc(post.caption)}</p>
-        <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
+        <h2 class="card-title">${esc(post.title)}</h2>
+        <p class="subtle clamp-3" style="font-size:.9rem;">${esc(post.caption)}</p>
+        <div class="card-actions">
           <button class="btn btn-primary" style="flex:1; justify-content:center;" data-id="${esc(post.id)}">Use this post</button>
           <button class="btn btn-icon" data-dl="${esc(post.id)}" title="Download design to your computer" aria-label="Download design">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -293,7 +300,9 @@ function renderComposer(root) {
       </div></div>
 
       <div class="card">
-        <div class="thumb"><img src="${esc(e.image)}" onerror="this.parentNode.style.minHeight='220px'"/></div>
+        <div class="thumb">${isVideo(e.image)
+          ? `<video src="${esc(e.image)}" controls playsinline></video>`
+          : `<img src="${esc(e.image)}" onerror="this.parentNode.style.minHeight='220px'"/>`}</div>
         <div class="pad"><span class="tag">Live preview</span>
           <p id="preview" style="white-space:pre-wrap; font-size:.92rem;"></p></div>
       </div>
@@ -547,18 +556,18 @@ function openPostModal(post, onChange) {
 // ---------- admin (corporate only) ----------
 function blankDraft() {
   return { id: null, title: '', category: '', caption: '', image: '',
-    platforms: ['facebook','instagram','linkedin','x'] };
+    platforms: ['facebook','instagram','linkedin'] };
 }
 
 async function renderAdmin(root) {
   if (state.user.role !== 'admin') { state.view = 'library'; return renderView(); }
-  const { posts } = await api.get('/library');
 
   const cats = state.categories || [];
   root.innerHTML = `
+    <div class="admin-stack">
     <div class="card" style="margin-bottom:18px;"><div class="pad">
       <h2 style="font-size:1.1rem;">🏷️ Categories</h2>
-      <p class="subtle" style="font-size:.88rem;">These power the filter franchisees see in the Content Library, and the category picker below.</p>
+      <p class="subtle" style="font-size:.88rem;">These power the filter franchisees see in the Content Library, and the category picker below. Edit or delete existing templates under the <b>Templates</b> tab.</p>
       <form id="catForm" style="display:flex; gap:10px; margin:10px 0 4px; flex-wrap:wrap;">
         <input name="newCat" placeholder="New category name (e.g. Did You Know)" style="flex:1; min-width:200px; padding:10px; border:1.5px solid var(--bo-gray-light); border-radius:9px; font-family:inherit; font-size:.95rem;" />
         <button class="btn btn-primary" type="submit">Add category</button>
@@ -573,19 +582,18 @@ async function renderAdmin(root) {
       </div>
     </div></div>
 
-    <div class="grid admin-grid">
-      <div class="card admin-col"><div class="pad">
+      <div class="card"><div class="pad">
         <h2 id="formTitle">➕ Add a template to the library</h2>
         <p class="subtle" style="font-size:.9rem;">Upload a design and caption here. It instantly appears in every franchisee's Content Library, ready for them to customize and publish. Use [BRACKETS] for details each location fills in (e.g. [CITY], [YOUR PHONE]).</p>
         <form id="adminForm">
-          <label class="alabel">1. Upload the design image</label>
+          <label class="alabel">1. Upload the design (image or video)</label>
           <div class="uploader" id="dropZone">
-            <img id="imgPrev" src="" style="width:72px; height:72px; object-fit:cover; border-radius:8px; background:#EBECEF; display:none;" />
+            <div id="mediaPrev" class="media-prev" style="display:none;"></div>
             <div>
-              <button class="btn btn-blue" type="button" id="pickFileBtn">📤 Choose image from your computer</button>
-              <div class="subtle" style="font-size:.78rem; margin-top:6px;">PNG, JPG, or SVG — e.g. a Canva export from the Bio-One Branding kit.</div>
+              <button class="btn btn-blue" type="button" id="pickFileBtn">📤 Choose image or video</button>
+              <div class="subtle" style="font-size:.78rem; margin-top:6px;">Images: PNG, JPG, SVG. Videos: MP4, WEBM, MOV (keep videos short).</div>
             </div>
-            <input type="file" id="imgFile" accept="image/*" style="display:none;" />
+            <input type="file" id="imgFile" accept="image/*,video/*" style="display:none;" />
           </div>
           <input type="hidden" name="image" />
           <label class="alabel">2. Template name<input name="title" placeholder="e.g. Did You Know — Odor Removal" required /></label>
@@ -606,11 +614,6 @@ async function renderAdmin(root) {
           </div>
         </form>
       </div></div>
-
-      <div class="admin-col">
-        <h2 style="margin:0 0 12px;">Library posts <span class="subtle" style="font-weight:400;">(${posts.length})</span></h2>
-        <div id="adminList"></div>
-      </div>
     </div>`;
 
   // style hook for labels
@@ -642,13 +645,21 @@ async function renderAdmin(root) {
   let draft = state.adminDraft || blankDraft();
   state.adminDraft = null;
   const form = document.getElementById('adminForm');
-  const imgPrev = document.getElementById('imgPrev');
+  const mediaPrev = document.getElementById('mediaPrev');
+
+  function showPreview(url) {
+    if (!url) { mediaPrev.style.display = 'none'; mediaPrev.innerHTML = ''; return; }
+    mediaPrev.style.display = 'block';
+    mediaPrev.innerHTML = isVideo(url)
+      ? `<video src="${esc(url)}" muted playsinline></video>`
+      : `<img src="${esc(url)}" />`;
+  }
 
   function fillForm() {
     form.title.value = draft.title; form.category.value = draft.category;
     form.caption.value = draft.caption; form.image.value = draft.image || '';
     document.getElementById('formTitle').textContent = draft.id ? '✏️ Edit template' : '➕ Add a template to the library';
-    if (draft.image) { imgPrev.src = draft.image; imgPrev.style.display = 'block'; } else { imgPrev.style.display = 'none'; }
+    showPreview(draft.image);
     root.querySelectorAll('#adminPlats .chip').forEach(c => {
       const on = draft.platforms.includes(c.dataset.p);
       c.classList.toggle('off', !on);
@@ -667,11 +678,12 @@ async function renderAdmin(root) {
   document.getElementById('pickFileBtn').onclick = () => imgFile.click();
   imgFile.onchange = async ev => {
     const file = ev.target.files[0]; if (!file) return;
+    toast('Uploading…');
     const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
     try {
       const { image } = await api.post('/admin/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl });
-      draft.image = image; form.image.value = image; imgPrev.src = image; imgPrev.style.display = 'block';
-      toast('Image uploaded');
+      draft.image = image; form.image.value = image; showPreview(image);
+      toast(isVideo(image) ? 'Video uploaded' : 'Image uploaded');
     } catch (err) { toast(err.error || 'Upload failed'); }
   };
 
@@ -679,19 +691,49 @@ async function renderAdmin(root) {
 
   form.onsubmit = async e => {
     e.preventDefault();
+    const wasEditing = !!draft.id;
     const payload = { id: draft.id, title: form.title.value, category: form.category.value,
       caption: form.caption.value, image: form.image.value, platforms: draft.platforms };
     try {
       await api.post('/admin/library', payload);
-      toast(draft.id ? 'Post updated' : 'Post added');
-      renderAdmin(root);
+      await refreshLibrary();
+      toast(wasEditing ? 'Template updated' : 'Template added to library');
+      state.adminDraft = null;
+      if (wasEditing) { state.view = 'templates'; renderView(); } // back to the list
+      else renderAdmin(root);                                     // clear form to add another
     } catch (err) { toast(err.error || 'Save failed'); }
   };
+}
 
-  const list = document.getElementById('adminList');
-  list.innerHTML = posts.map(post => `
+// ---------- templates (corporate only): edit & delete existing templates ----------
+async function renderTemplates(root) {
+  if (state.user.role !== 'admin') { state.view = 'library'; return renderView(); }
+  await refreshLibrary();
+  const posts = state.library;
+  const cats = state.categories || [];
+  if (!state.tplFilter || (state.tplFilter !== '__all' && !cats.includes(state.tplFilter))) state.tplFilter = '__all';
+  const active = state.tplFilter;
+  const visible = active === '__all' ? posts : posts.filter(p => p.category === active);
+
+  root.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
+      <h2 style="margin:0;">Templates <span class="subtle" style="font-weight:400;">(${posts.length})</span></h2>
+      <button class="btn btn-primary" id="newTplBtn">➕ New template</button>
+    </div>
+    <div class="filter-bar">
+      <span class="filter-label">Filter:</span>
+      <button class="filter-chip ${active==='__all'?'on':''}" data-tcat="__all">All</button>
+      ${cats.map(c => `<button class="filter-chip ${active===c?'on':''}" data-tcat="${esc(c)}">${esc(c)}</button>`).join('')}
+    </div>
+    <div id="tplList">${visible.length ? '' : '<div class="muted-note">No templates here yet.</div>'}</div>`;
+
+  document.getElementById('newTplBtn').onclick = () => { state.adminDraft = null; state.view = 'admin'; renderView(); };
+  root.querySelectorAll('button[data-tcat]').forEach(b => b.onclick = () => { state.tplFilter = b.dataset.tcat; renderTemplates(root); });
+
+  const list = document.getElementById('tplList');
+  list.innerHTML = visible.map(post => `
     <div class="card" style="margin-bottom:12px;"><div class="pad" style="display:flex; gap:12px; align-items:flex-start;">
-      <img src="${esc(post.image)}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; flex-shrink:0;" onerror="this.style.visibility='hidden'"/>
+      <div class="tpl-thumb">${mediaThumb(post.image, post.title)}</div>
       <div style="flex:1; min-width:0;">
         ${post.category ? `<span class="tag">${esc(post.category)}</span>` : `<span class="tag" style="background:#EBECEF; color:var(--bo-gray);">Uncategorized</span>`}
         <div style="font-weight:700; overflow-wrap:anywhere;">${esc(post.title)}</div>
@@ -701,18 +743,18 @@ async function renderAdmin(root) {
         <button class="btn btn-ghost" style="padding:6px 14px;" data-edit="${post.id}">Edit</button>
         <button class="btn btn-ghost" style="padding:6px 14px; color:#E62A65; border-color:#f5c2d3;" data-del="${post.id}">Delete</button>
       </div>
-    </div></div>`).join('');
+    </div></div>`).join('') || list.innerHTML;
 
   list.querySelectorAll('button[data-edit]').forEach(b => b.onclick = () => {
     const post = posts.find(p => p.id === b.dataset.edit);
     state.adminDraft = { id: post.id, title: post.title, category: post.category,
       caption: post.caption, image: post.image, platforms: [...post.platforms] };
-    renderAdmin(root);
+    state.view = 'admin'; renderView();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   list.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
-    if (!confirm('Delete this post from the library?')) return;
-    try { await api.post('/admin/library/delete', { id: b.dataset.del }); toast('Deleted'); renderAdmin(root); }
+    if (!confirm('Delete this template from the library?')) return;
+    try { await api.post('/admin/library/delete', { id: b.dataset.del }); toast('Template deleted'); renderTemplates(root); }
     catch (err) { toast(err.error || 'Delete failed'); }
   });
 }

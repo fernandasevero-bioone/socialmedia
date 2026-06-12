@@ -4,7 +4,7 @@
   </linearGradient></defs>
   <rect width="1080" height="1350" fill="#242428"/>
   <rect width="1080" height="24" fill="url(#g)"/>
-  <text x="72" y="660" fill="#FFFFFF" font-family="Roboto,Arial" font-weight="900" font-size="84">OUR SERVICES</text>
-  <text x="72" y="1230" fill="#BDBDBF" font-family="Roboto,Arial" font-size="36">Help First, Business Second.</text>
+  <text fill="#FFFFFF" font-family="Roboto,Arial" font-weight="900" font-size="84"><tspan x="72" y="675">OUR SERVICES</tspan></text>
+  <text x="72" y="1240" fill="#BDBDBF" font-family="Roboto,Arial" font-size="36">Help First, Business Second.</text>
   <rect x="0" y="1326" width="1080" height="24" fill="url(#g)"/>
 </svg>

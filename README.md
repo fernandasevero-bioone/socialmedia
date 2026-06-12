@@ -3,7 +3,7 @@
 A franchisee social-media publishing tool for Bio-One. Each franchisee
 connects **their own** social accounts, browses a corporate-curated content
 library, tweaks the caption for their location, and publishes (now or
-scheduled) to Facebook, Instagram, LinkedIn, X, TikTok, and Pinterest.
+scheduled) to Facebook, Instagram, LinkedIn, TikTok, and Pinterest.
 
 Built to the **Bio-One Brand Guidelines V3.0 (July 2023)** — palette,
 gradient rules, and Roboto typography are taken directly from the guide.
@@ -76,7 +76,6 @@ exact scopes and endpoints. Summary:
 | Facebook | Meta App Review (`pages_manage_posts`) | Posts to Pages |
 | Instagram | Meta App Review (`instagram_content_publish`) | Business/Creator acct linked to a FB Page; image required |
 | LinkedIn | Community Management API | Company Pages (personal profiles restricted) |
-| X | Paid API tier (~$100/mo Basic) | One cost for the whole app |
 | TikTok | Content Posting API audit | Pre-audit posts go to drafts only |
 | Pinterest | Standard access request | Pins require an image |
 

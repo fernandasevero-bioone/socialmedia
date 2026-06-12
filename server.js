@@ -26,7 +26,7 @@ function send(res, status, body, headers = {}) {
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
-const MAX_BODY = 10 * 1024 * 1024; // 10MB — accommodates base64 image uploads
+const MAX_BODY = 80 * 1024 * 1024; // 80MB — accommodates base64 image/short-video uploads
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -153,10 +153,15 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/admin/upload' && req.method === 'POST') {
         // Accepts { filename, dataUrl } where dataUrl is a base64 data URI.
         // Keeps uploads dependency-free (no multipart parser needed).
+        // PRODUCTION: large videos should stream to cloud storage (S3/GCS)
+        // rather than ride through a base64 JSON body.
         const { filename, dataUrl } = await readBody(req);
-        const m = /^data:(image\/(png|jpeg|jpg|svg\+xml|webp|gif));base64,(.+)$/.exec(dataUrl || '');
-        if (!m) return send(res, 400, { error: 'Unsupported image. Use PNG, JPG, SVG, WEBP or GIF.' });
-        const ext = { 'png':'png','jpeg':'jpg','jpg':'jpg','svg+xml':'svg','webp':'webp','gif':'gif' }[m[2]];
+        const m = /^data:((?:image|video)\/([a-z0-9.+-]+));base64,(.+)$/i.exec(dataUrl || '');
+        if (!m) return send(res, 400, { error: 'Unsupported file. Upload an image (PNG, JPG, SVG, WEBP, GIF) or video (MP4, WEBM, MOV).' });
+        const EXT = { 'png':'png','jpeg':'jpg','jpg':'jpg','svg+xml':'svg','webp':'webp','gif':'gif',
+                      'mp4':'mp4','webm':'webm','quicktime':'mov','x-m4v':'m4v','ogg':'ogg' };
+        const ext = EXT[m[2].toLowerCase()];
+        if (!ext) return send(res, 400, { error: 'Unsupported format: ' + m[2] });
         const safe = (filename || 'upload').replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40);
         const name = `up-${Date.now()}-${safe}.${ext}`;
         fs.mkdirSync(UPLOAD_DIR, { recursive: true });
