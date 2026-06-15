@@ -268,13 +268,30 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { post: store.updatePost(user.id, id, fields) });
     }
     if (p === '/api/posts/delete' && req.method === 'POST') {
-      // cancel a scheduled post — scheduled posts only
+      // remove a post from the app (works for scheduled OR published). For a
+      // published Facebook post, also best-effort delete it from the Page.
       const { id } = await readBody(req);
       const existing = store.getPost(user.id, id);
       if (!existing) return send(res, 404, { error: 'Post not found' });
-      if (existing.status !== 'scheduled') return send(res, 400, { error: 'Only scheduled posts can be canceled' });
+      let platformNote = null;
+      if (existing.status === 'published' && existing.results && metaApi.isConfigured()) {
+        const accounts = store.getAccounts(user.id);
+        const fbRes = existing.results.facebook;
+        const fbAcc = accounts.facebook;
+        if (fbRes && fbRes.ok && fbAcc && fbAcc.token) {
+          const postId = fbRes.platformId || (fbRes.externalUrl || '').split('facebook.com/')[1];
+          if (postId) {
+            try { await metaApi.deletePost({ ...fbAcc, token: secure.decrypt(fbAcc.token) }, postId); }
+            catch (e) { platformNote = 'Removed from the app, but Facebook deletion failed: ' + e.message; }
+          }
+        }
+        // Instagram media cannot be deleted via the API
+        if (existing.results.instagram && existing.results.instagram.ok) {
+          platformNote = (platformNote ? platformNote + ' ' : '') + 'Instagram posts must be deleted in the Instagram app.';
+        }
+      }
       store.deletePost(user.id, id);
-      return send(res, 200, { ok: true });
+      return send(res, 200, { ok: true, note: platformNote });
     }
     if (p === '/api/publish' && req.method === 'POST') {
       const { libraryId, caption, captions, category, media, platforms: targets, scheduledFor } = await readBody(req);

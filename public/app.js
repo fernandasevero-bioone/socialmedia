@@ -14,6 +14,21 @@ function toast(msg) {
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2600);
 }
+
+// Run an async action with a spinner on the clicked button (so it visibly
+// "thinks" while the network call is in flight). Restores the button after.
+async function withBusy(btn, fn, busyLabel) {
+  if (!btn) return fn();
+  const orig = btn.innerHTML;
+  const wasDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.classList.add('is-busy');
+  btn.innerHTML = `<span class="spinner"></span>${busyLabel ? ' ' + busyLabel : ''}`;
+  try { return await fn(); }
+  finally {
+    if (btn.isConnected) { btn.disabled = wasDisabled; btn.classList.remove('is-busy'); btn.innerHTML = orig; }
+  }
+}
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const platMeta = id => state.platforms.find(p => p.id === id) || { name:id, color:'#7A7A80' };
 const isVideo = url => /\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(url || '');
@@ -97,13 +112,15 @@ function renderLogin() {
     <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Sign In</button>
     ${authLinks([['Create an account', 'signup'], ['Forgot password?', 'forgot']])}`);
   wireAuthLinks(form);
-  form.onsubmit = async e => {
+  form.onsubmit = e => {
     e.preventDefault();
     const f = new FormData(form);
-    try {
-      const { user } = await api.post('/login', { email: f.get('email'), password: f.get('password') });
-      state.user = user; await loadData(); renderApp();
-    } catch (err) { toast(err.error || 'Login failed'); }
+    withBusy(form.querySelector('.btn-primary'), async () => {
+      try {
+        const { user } = await api.post('/login', { email: f.get('email'), password: f.get('password') });
+        state.user = user; await loadData(); renderApp();
+      } catch (err) { toast(err.error || 'Login failed'); }
+    }, 'Signing in…');
   };
 }
 
@@ -117,18 +134,20 @@ function renderSignup() {
     <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:22px;">Create Account</button>
     ${authLinks([['← Back to sign in', 'login']])}`);
   wireAuthLinks(form);
-  form.onsubmit = async e => {
+  form.onsubmit = e => {
     e.preventDefault();
     const f = new FormData(form);
-    try {
-      const { user } = await api.post('/register', {
-        name: f.get('name'), location: f.get('location'),
-        email: f.get('email'), password: f.get('password')
-      });
-      state.user = user; await loadData();
-      toast('Welcome to Bio-One Social Hub, ' + user.name.split(' ')[0] + '!');
-      renderApp();
-    } catch (err) { toast(err.error || 'Could not create account'); }
+    withBusy(form.querySelector('.btn-primary'), async () => {
+      try {
+        const { user } = await api.post('/register', {
+          name: f.get('name'), location: f.get('location'),
+          email: f.get('email'), password: f.get('password')
+        });
+        state.user = user; await loadData();
+        toast('Welcome to Bio-One Social Hub, ' + user.name.split(' ')[0] + '!');
+        renderApp();
+      } catch (err) { toast(err.error || 'Could not create account'); }
+    }, 'Creating…');
   };
 }
 
@@ -478,17 +497,19 @@ function renderComposer(root) {
   // custom-post media uploader
   if (e.custom) {
     const ownFile = document.getElementById('ownFile');
-    document.getElementById('ownPick').onclick = () => ownFile.click();
-    ownFile.onchange = async ev => {
+    const ownPick = document.getElementById('ownPick');
+    ownPick.onclick = () => ownFile.click();
+    ownFile.onchange = ev => {
       const files = [...ev.target.files]; if (!files.length) return;
-      toast(`Uploading ${files.length} file(s)…`);
-      for (const file of files) {
-        const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
-        try { const { image } = await api.post('/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl }); e.media.push(image); }
-        catch (err) { toast(err.error || 'Upload failed'); }
-      }
-      renderComposer(root);
-      toast('Upload complete');
+      withBusy(ownPick, async () => {
+        for (const file of files) {
+          const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
+          try { const { image } = await api.post('/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl }); e.media.push(image); }
+          catch (err) { toast(err.error || 'Upload failed'); }
+        }
+        renderComposer(root);
+        toast('Upload complete');
+      }, 'Uploading…');
     };
     root.querySelectorAll('button[data-own-rm]').forEach(b => b.onclick = () => { e.media.splice(+b.dataset.ownRm, 1); renderComposer(root); });
     root.querySelectorAll('button[data-own-cover]').forEach(b => b.onclick = () => {
@@ -514,11 +535,11 @@ function renderComposer(root) {
       state.editing = null; state.view = scheduledFor ? 'calendar' : 'history'; renderView();
     } catch (err) { toast(err.error || 'Publish failed'); }
   };
-  const pubNow = document.getElementById('pubNow'); if (pubNow) pubNow.onclick = () => publish(null);
+  const pubNow = document.getElementById('pubNow'); if (pubNow) pubNow.onclick = () => withBusy(pubNow, () => publish(null), 'Publishing…');
   const schedBtn = document.getElementById('schedBtn');
   if (schedBtn) schedBtn.onclick = () => { document.getElementById('schedRow').style.display='flex'; };
   const schedGo = document.getElementById('schedGo');
-  if (schedGo) schedGo.onclick = () => { const v = document.getElementById('schedAt').value; if(!v) return toast('Pick a date/time'); publish(new Date(v).toISOString()); };
+  if (schedGo) schedGo.onclick = () => { const v = document.getElementById('schedAt').value; if(!v) return toast('Pick a date/time'); withBusy(schedGo, () => publish(new Date(v).toISOString()), 'Scheduling…'); };
 }
 
 // Trigger a browser download of a file the server streams as an attachment.
@@ -579,29 +600,33 @@ function renderConnections(root) {
 
   // combined Meta connect/disconnect
   const connMeta = list.querySelector('button[data-conn-meta]');
-  if (connMeta) connMeta.onclick = async () => {
-    if (fb.oauth) { window.location.href = '/oauth/meta/start'; return; } // real Meta login (links both)
-    await api.post('/connect', { platform: 'facebook' });
-    const { accounts } = await api.post('/connect', { platform: 'instagram' });
-    state.accounts = accounts; toast('Connected Facebook & Instagram'); renderConnections(root);
+  if (connMeta) connMeta.onclick = () => {
+    if (fb.oauth) { connMeta.classList.add('is-busy'); connMeta.innerHTML = '<span class="spinner"></span> Redirecting…'; window.location.href = '/oauth/meta/start'; return; }
+    withBusy(connMeta, async () => {
+      await api.post('/connect', { platform: 'facebook' });
+      const { accounts } = await api.post('/connect', { platform: 'instagram' });
+      state.accounts = accounts; toast('Connected Facebook & Instagram'); renderConnections(root);
+    }, 'Connecting…');
   };
   const discMeta = list.querySelector('button[data-disc-meta]');
-  if (discMeta) discMeta.onclick = async () => {
+  if (discMeta) discMeta.onclick = () => withBusy(discMeta, async () => {
     await api.post('/disconnect', { platform: 'facebook' });
     const { accounts } = await api.post('/disconnect', { platform: 'instagram' });
     state.accounts = accounts; renderConnections(root);
-  };
+  });
 
   // other platforms
-  list.querySelectorAll('button[data-conn]').forEach(b => b.onclick = async () => {
+  list.querySelectorAll('button[data-conn]').forEach(b => b.onclick = () => {
     if (b.dataset.oauth) { window.location.href = '/oauth/meta/start'; return; }
-    const { accounts } = await api.post('/connect', { platform: b.dataset.conn });
-    state.accounts = accounts; toast('Connected ' + platMeta(b.dataset.conn).name); renderConnections(root);
+    withBusy(b, async () => {
+      const { accounts } = await api.post('/connect', { platform: b.dataset.conn });
+      state.accounts = accounts; toast('Connected ' + platMeta(b.dataset.conn).name); renderConnections(root);
+    }, 'Connecting…');
   });
-  list.querySelectorAll('button[data-disc]').forEach(b => b.onclick = async () => {
+  list.querySelectorAll('button[data-disc]').forEach(b => b.onclick = () => withBusy(b, async () => {
     const { accounts } = await api.post('/disconnect', { platform: b.dataset.disc });
     state.accounts = accounts; renderConnections(root);
-  });
+  }));
 }
 
 // ---------- history ----------
@@ -615,9 +640,12 @@ async function renderHistory(root) {
     <div class="card" style="margin-bottom:14px;"><div class="pad" style="display:flex; gap:14px; align-items:flex-start;">
       ${cover ? `<div class="hist-thumb">${mediaThumb(cover, '')}${(post.media && post.media.length > 1) ? `<span class="count-badge">+${post.media.length-1}</span>` : ''}</div>` : ''}
       <div style="flex:1; min-width:0;">
-        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;">
           <span class="badge ${post.status==='published'?'ok':'no'}">${post.status==='scheduled'?'🗓️ Scheduled':'✅ Published'}</span>
-          <span class="subtle" style="font-size:.85rem;">${new Date(post.scheduledFor||post.createdAt).toLocaleString()}</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="subtle" style="font-size:.85rem;">${new Date(post.scheduledFor||post.createdAt).toLocaleString()}</span>
+            <button class="btn btn-ghost" style="padding:5px 12px; color:#E62A65; border-color:#f5c2d3;" data-del-post="${esc(post.id)}">Delete</button>
+          </div>
         </div>
         <p style="white-space:pre-wrap; margin:10px 0;">${esc(post.caption)}</p>
         <div class="platforms">${post.platforms.map(t => {
@@ -629,6 +657,21 @@ async function renderHistory(root) {
       </div>
     </div></div>`;
   }).join('');
+
+  root.querySelectorAll('button[data-del-post]').forEach(b => b.onclick = () => {
+    const post = posts.find(p => p.id === b.dataset.delPost);
+    const published = post && post.status === 'published';
+    if (!confirm(published
+      ? 'Delete this post? It will be removed from the app, and from your Facebook Page if it was posted there. (Instagram posts must be deleted in the Instagram app.)'
+      : 'Delete this scheduled post? It will not be published.')) return;
+    withBusy(b, async () => {
+      try {
+        const { note } = await api.post('/posts/delete', { id: b.dataset.delPost });
+        toast(note || 'Post deleted');
+        renderHistory(root);
+      } catch (err) { toast(err.error || 'Delete failed'); }
+    });
+  });
 }
 
 // ---------- analytics ----------
@@ -798,7 +841,10 @@ function openPostModal(post, onChange) {
         </div>`
       : `
         <p style="white-space:pre-wrap;">${esc(post.caption)}</p>
-        <p class="subtle" style="font-size:.85rem;">Published ${new Date(post.createdAt).toLocaleString()}. Published posts can't be edited here.</p>`}
+        <p class="subtle" style="font-size:.85rem;">Published ${new Date(post.createdAt).toLocaleString()}. Published posts can't be edited, but you can delete them.</p>
+        <div style="display:flex; margin-top:16px;">
+          <button class="btn btn-ghost" id="mDelete" style="color:var(--bo-pink); border-color:#f5c2d3; margin-left:auto;">Delete post</button>
+        </div>`}
     </div>`;
   document.body.appendChild(overlay);
 
@@ -807,24 +853,33 @@ function openPostModal(post, onChange) {
   overlay.querySelector('#mClose').onclick = close;
 
   if (isScheduled) {
-    overlay.querySelector('#mSave').onclick = async () => {
+    overlay.querySelector('#mSave').onclick = () => {
       const when = overlay.querySelector('#mWhen').value;
       if (!when) return toast('Pick a date/time');
-      try {
-        await api.post('/posts/update', { id: post.id,
-          caption: overlay.querySelector('#mCap').value,
-          scheduledFor: new Date(when).toISOString() });
-        toast('Scheduled post updated');
-        close(); onChange();
-      } catch (err) { toast(err.error || 'Update failed'); }
+      withBusy(overlay.querySelector('#mSave'), async () => {
+        try {
+          await api.post('/posts/update', { id: post.id,
+            caption: overlay.querySelector('#mCap').value,
+            scheduledFor: new Date(when).toISOString() });
+          toast('Scheduled post updated');
+          close(); onChange();
+        } catch (err) { toast(err.error || 'Update failed'); }
+      }, 'Saving…');
     };
-    overlay.querySelector('#mCancel').onclick = async () => {
+    overlay.querySelector('#mCancel').onclick = () => {
       if (!confirm('Cancel this scheduled post? It will not be published.')) return;
-      try {
-        await api.post('/posts/delete', { id: post.id });
-        toast('Post canceled');
-        close(); onChange();
-      } catch (err) { toast(err.error || 'Cancel failed'); }
+      withBusy(overlay.querySelector('#mCancel'), async () => {
+        try { await api.post('/posts/delete', { id: post.id }); toast('Post canceled'); close(); onChange(); }
+        catch (err) { toast(err.error || 'Cancel failed'); }
+      });
+    };
+  } else {
+    overlay.querySelector('#mDelete').onclick = () => {
+      if (!confirm('Delete this post? It will be removed from the app, and from your Facebook Page if posted there. (Instagram posts must be deleted in the Instagram app.)')) return;
+      withBusy(overlay.querySelector('#mDelete'), async () => {
+        try { const { note } = await api.post('/posts/delete', { id: post.id }); toast(note || 'Post deleted'); close(); onChange(); }
+        catch (err) { toast(err.error || 'Delete failed'); }
+      });
     };
   }
 }
@@ -870,11 +925,13 @@ async function renderAdmin(root) {
       </div></div>
     </div>`;
 
-  root.querySelectorAll('button[data-del-user]').forEach(b => b.onclick = async () => {
+  root.querySelectorAll('button[data-del-user]').forEach(b => b.onclick = () => {
     const email = b.dataset.delUser;
     if (!confirm(`Delete ${email}? This permanently removes their account, connected accounts, and posts.`)) return;
-    try { await api.post('/admin/users/delete', { email }); toast('User deleted'); renderAdmin(root); }
-    catch (err) { toast(err.error || 'Delete failed'); }
+    withBusy(b, async () => {
+      try { await api.post('/admin/users/delete', { email }); toast('User deleted'); renderAdmin(root); }
+      catch (err) { toast(err.error || 'Delete failed'); }
+    });
   });
 }
 
@@ -922,12 +979,14 @@ async function renderTemplates(root) {
     </div>`;
 
   // category management
-  document.getElementById('catForm').onsubmit = async e => {
+  document.getElementById('catForm').onsubmit = e => {
     e.preventDefault();
     const name = e.target.newCat.value.trim();
     if (!name) return;
-    try { const r = await api.post('/admin/categories', { name }); state.categories = r.categories; toast('Category added'); renderTemplates(root); }
-    catch (err) { toast(err.error || 'Could not add category'); }
+    withBusy(e.target.querySelector('button[type=submit]'), async () => {
+      try { const r = await api.post('/admin/categories', { name }); state.categories = r.categories; toast('Category added'); renderTemplates(root); }
+      catch (err) { toast(err.error || 'Could not add category'); }
+    });
   };
   root.querySelectorAll('button[data-edit-cat]').forEach(b => b.onclick = async () => {
     const oldName = b.dataset.editCat;
@@ -1059,38 +1118,42 @@ function renderTemplateForm(root) {
   });
 
   const imgFile = document.getElementById('imgFile');
-  document.getElementById('pickFileBtn').onclick = () => imgFile.click();
-  imgFile.onchange = async ev => {
+  const pickBtn = document.getElementById('pickFileBtn');
+  pickBtn.onclick = () => imgFile.click();
+  imgFile.onchange = ev => {
     const files = [...ev.target.files]; if (!files.length) return;
-    toast(`Uploading ${files.length} file(s)…`);
-    for (const file of files) {
-      const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
-      try {
-        const { image } = await api.post('/admin/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl });
-        draft.media.push(image);
-      } catch (err) { toast(err.error || 'Upload failed'); }
-    }
-    imgFile.value = '';
-    renderMediaList();
-    toast('Upload complete');
+    withBusy(pickBtn, async () => {
+      for (const file of files) {
+        const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
+        try {
+          const { image } = await api.post('/admin/upload', { filename: file.name.replace(/\.[^.]+$/,''), dataUrl });
+          draft.media.push(image);
+        } catch (err) { toast(err.error || 'Upload failed'); }
+      }
+      imgFile.value = '';
+      renderMediaList();
+      toast('Upload complete');
+    }, 'Uploading…');
   };
 
   const back = () => { state.tplForm = null; renderTemplates(root); };
   document.getElementById('tplBack').onclick = back;
   document.getElementById('cancelTpl').onclick = back;
 
-  form.onsubmit = async e => {
+  form.onsubmit = e => {
     e.preventDefault();
     const wasEditing = !!draft.id;
     const payload = { id: draft.id, title: form.title.value, category: form.category.value,
       caption: form.caption.value, image: form.image.value, media: draft.media, platforms: draft.platforms };
-    try {
-      await api.post('/admin/library', payload);
-      await refreshLibrary();
-      toast(wasEditing ? 'Template updated' : 'Template added to library');
-      state.tplForm = null;
-      renderTemplates(root);
-    } catch (err) { toast(err.error || 'Save failed'); }
+    withBusy(form.querySelector('button[type=submit]'), async () => {
+      try {
+        await api.post('/admin/library', payload);
+        await refreshLibrary();
+        toast(wasEditing ? 'Template updated' : 'Template added to library');
+        state.tplForm = null;
+        renderTemplates(root);
+      } catch (err) { toast(err.error || 'Save failed'); }
+    }, 'Saving…');
   };
 }
 
