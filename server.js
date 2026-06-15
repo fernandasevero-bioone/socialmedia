@@ -285,8 +285,8 @@ const server = http.createServer(async (req, res) => {
       let platformNote = null;
       if (existing.status === 'published' && existing.results && metaApi.isConfigured()) {
         const accounts = store.getAccounts(user.id);
-        const fbRes = existing.results.facebook;
-        const fbAcc = accounts.facebook;
+        // Facebook Page post
+        const fbRes = existing.results.facebook, fbAcc = accounts.facebook;
         if (fbRes && fbRes.ok && fbAcc && fbAcc.token) {
           const postId = fbRes.platformId || (fbRes.externalUrl || '').split('facebook.com/')[1];
           if (postId) {
@@ -294,9 +294,11 @@ const server = http.createServer(async (req, res) => {
             catch (e) { platformNote = 'Removed from the app, but Facebook deletion failed: ' + e.message; }
           }
         }
-        // Instagram media cannot be deleted via the API
-        if (existing.results.instagram && existing.results.instagram.ok) {
-          platformNote = (platformNote ? platformNote + ' ' : '') + 'Instagram posts must be deleted in the Instagram app.';
+        // Instagram post (requires instagram_manage_content)
+        const igRes = existing.results.instagram, igAcc = accounts.instagram;
+        if (igRes && igRes.ok && igAcc && igAcc.token && igRes.platformId) {
+          try { await metaApi.deletePost({ ...igAcc, token: secure.decrypt(igAcc.token) }, igRes.platformId); }
+          catch (e) { platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app, but Instagram deletion failed: ' + e.message; }
         }
       }
       store.deletePost(user.id, id);

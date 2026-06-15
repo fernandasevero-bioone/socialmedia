@@ -689,7 +689,7 @@ async function renderHistory(root) {
     const post = posts.find(p => p.id === b.dataset.delPost);
     const published = post && post.status === 'published';
     if (!confirm(published
-      ? 'Delete this post? It will be removed from the app, and from your Facebook Page if it was posted there. (Instagram posts must be deleted in the Instagram app.)'
+      ? 'Delete this post? It will be removed from the app and from the connected Facebook/Instagram accounts it was posted to.'
       : 'Delete this scheduled post? It will not be published.')) return;
     withBusy(b, async () => {
       try {
@@ -902,7 +902,7 @@ function openPostModal(post, onChange) {
     };
   } else {
     overlay.querySelector('#mDelete').onclick = () => {
-      if (!confirm('Delete this post? It will be removed from the app, and from your Facebook Page if posted there. (Instagram posts must be deleted in the Instagram app.)')) return;
+      if (!confirm('Delete this post? It will be removed from the app and from the connected Facebook/Instagram accounts it was posted to.')) return;
       withBusy(overlay.querySelector('#mDelete'), async () => {
         try { const { note } = await api.post('/posts/delete', { id: post.id }); toast(note || 'Post deleted'); close(); onChange(); }
         catch (err) { toast(err.error || 'Delete failed'); }
