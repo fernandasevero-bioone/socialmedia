@@ -68,7 +68,16 @@ function serveStatic(req, res, urlPath) {
   const filePath = path.join(PUBLIC_DIR, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
   if (!filePath.startsWith(PUBLIC_DIR)) return send(res, 403, { error: 'forbidden' });
   fs.readFile(filePath, (err, buf) => {
-    if (err) return send(res, 404, { error: 'not found' });
+    if (err) {
+      // SPA fallback: extensionless routes (e.g. /calendar, /analytics) serve
+      // the app shell so deep links and refresh work.
+      if (!path.extname(filePath)) {
+        return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, b2) =>
+          e2 ? send(res, 404, { error: 'not found' })
+             : (res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(b2)));
+      }
+      return send(res, 404, { error: 'not found' });
+    }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
     res.end(buf);
   });

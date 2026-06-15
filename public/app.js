@@ -47,13 +47,16 @@ const META_MSG = {
 };
 
 async function boot() {
-  // returning from Meta OAuth? show a message and clean the URL
+  // initial view from the URL slug (e.g. /calendar)
+  const fromPath = viewFromPath();
+  if (fromPath) state.view = fromPath;
+  // returning from Meta OAuth? show a message and land on My Accounts
   const params = new URLSearchParams(location.search);
   if (params.get('meta')) {
     const msg = META_MSG[params.get('meta')] || '';
-    history.replaceState(null, '', location.pathname);
-    if (msg) setTimeout(() => toast(msg), 400);
     state.view = 'connections';
+    history.replaceState(null, '', '/' + slugForView('connections'));
+    if (msg) setTimeout(() => toast(msg), 400);
   }
   // arriving via a password-reset link? (/#reset=TOKEN)
   const resetMatch = location.hash.match(/^#reset=([0-9a-f]+)$/);
@@ -219,11 +222,35 @@ function renderApp() {
       <div id="viewRoot"></div>
     </div>`;
   document.getElementById('logoutBtn').onclick = async () => { await api.post('/logout'); state.user=null; renderLogin(); };
-  app.querySelectorAll('.tab').forEach(b => b.onclick = () => { state.view = b.dataset.v; state.editing = null; state.tplForm = null; renderView(); });
+  app.querySelectorAll('.tab').forEach(b => b.onclick = () => go(b.dataset.v));
   renderView();
 }
 
 function connectedCount() { return Object.keys(state.accounts).length; }
+
+// URL slug ↔ view mapping (each section gets its own address)
+const VIEW_TO_SLUG = { library:'library', calendar:'calendar', analytics:'analytics',
+  connections:'accounts', history:'history', admin:'admin', templates:'templates' };
+const SLUG_TO_VIEW = { '':'library', library:'library', calendar:'calendar', analytics:'analytics',
+  accounts:'connections', history:'history', admin:'admin', templates:'templates' };
+
+function slugForView(v) { return VIEW_TO_SLUG[v] || 'library'; }
+function viewFromPath() { return SLUG_TO_VIEW[location.pathname.replace(/^\/+/, '').toLowerCase()]; }
+
+// navigate to a top-level view and update the URL
+function go(view, push = true) {
+  state.view = view; state.editing = null; state.tplForm = null;
+  if (push) history.pushState({ view }, '', '/' + slugForView(view));
+  renderView();
+}
+
+// browser back/forward
+window.onpopstate = () => {
+  if (!state.user) return;
+  state.view = viewFromPath() || 'library';
+  state.editing = null; state.tplForm = null;
+  renderView();
+};
 
 function renderView() {
   const root = document.getElementById('viewRoot');
@@ -532,7 +559,7 @@ function renderComposer(root) {
       await api.post('/publish', { libraryId: e.libraryId, caption: e.caption, captions,
         category: e.category || '', media: e.media, platforms: e.platforms, scheduledFor });
       toast(scheduledFor ? '🗓️ Scheduled!' : '✅ Published to ' + e.platforms.length + ' account(s)');
-      state.editing = null; state.view = scheduledFor ? 'calendar' : 'history'; renderView();
+      state.editing = null; go(scheduledFor ? 'calendar' : 'history');
     } catch (err) { toast(err.error || 'Publish failed'); }
   };
   const pubNow = document.getElementById('pubNow'); if (pubNow) pubNow.onclick = () => withBusy(pubNow, () => publish(null), 'Publishing…');
