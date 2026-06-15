@@ -21,6 +21,16 @@ services:
       # How often the scheduler checks for due posts (ms). Default 30s.
       - key: SCHEDULER_INTERVAL_MS
         value: "30000"
+      # Public URL of this app (OAuth redirect + media URLs Meta fetches)
+      - key: APP_BASE_URL
+        value: https://bio-one-social-hub.onrender.com
+      # Secrets — set these in the Render dashboard (Environment), not in code.
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
 
 # ── To upgrade to persistent storage later (paid) ──────────────────────────
 #   1. change `plan: free` above to `plan: starter`
