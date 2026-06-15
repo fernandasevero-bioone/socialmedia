@@ -10,11 +10,22 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+require('./lib/env').loadEnv(); // load config/platforms.env into process.env
+
 const auth = require('./lib/auth');
 const store = require('./lib/store');
 const library = require('./lib/library');
 const providers = require('./lib/providers');
 const mailer = require('./lib/mailer');
+const metaApi = require('./lib/meta');
+const secure = require('./lib/secure');
+
+const oauthStates = new Map(); // state -> { userId, ts }
+function baseUrlFrom(req) {
+  if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  return `${proto}://${req.headers.host}`;
+}
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -63,9 +74,56 @@ function serveStatic(req, res, urlPath) {
   });
 }
 
+function redirect(res, location) {
+  res.writeHead(302, { Location: location });
+  res.end();
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
+
+  // ---- Meta (Facebook + Instagram) OAuth ----
+  if (p === '/oauth/meta/start') {
+    const user = currentUser(req);
+    if (!user) return redirect(res, '/');
+    if (!metaApi.isConfigured()) return send(res, 503, { error: 'Meta is not configured yet (set META_APP_ID / META_APP_SECRET).' });
+    const state = crypto.randomBytes(16).toString('hex');
+    oauthStates.set(state, { userId: user.id, ts: Date.now() });
+    const redirectUri = `${baseUrlFrom(req)}/oauth/meta/callback`;
+    return redirect(res, metaApi.authUrl(redirectUri, state));
+  }
+  if (p === '/oauth/meta/callback') {
+    const state = url.searchParams.get('state');
+    const code = url.searchParams.get('code');
+    const entry = state && oauthStates.get(state);
+    oauthStates.delete(state);
+    if (url.searchParams.get('error') || !code || !entry) return redirect(res, '/?meta=denied');
+    if (Date.now() - entry.ts > 10 * 60 * 1000) return redirect(res, '/?meta=expired');
+    try {
+      const redirectUri = `${baseUrlFrom(req)}/oauth/meta/callback`;
+      const userToken = await metaApi.exchangeCode(code, redirectUri);
+      const conn = await metaApi.getConnections(userToken);
+      if (conn.pages[0]) {
+        const pg = conn.pages[0];
+        store.setAccount(entry.userId, 'facebook', {
+          handle: pg.name, pageId: pg.id, token: secure.encrypt(pg.token),
+          status: 'connected', connectedAt: new Date().toISOString()
+        });
+      }
+      if (conn.instagram[0]) {
+        const ig = conn.instagram[0];
+        store.setAccount(entry.userId, 'instagram', {
+          handle: '@' + (ig.username || 'account'), id: ig.id, pageId: ig.pageId,
+          token: secure.encrypt(ig.token), status: 'connected', connectedAt: new Date().toISOString()
+        });
+      }
+      return redirect(res, conn.pages.length ? '/?meta=connected' : '/?meta=nopage');
+    } catch (err) {
+      console.error('[meta oauth]', err.message);
+      return redirect(res, '/?meta=error');
+    }
+  }
 
   // ---- API ----
   if (p.startsWith('/api/')) {
@@ -289,7 +347,10 @@ async function deliverPost(post, accounts) {
       failures.push({ platform: prov.meta().name, error: 'account no longer connected' });
       continue;
     }
-    post.results[t] = await prov.publish(accounts[t], { ...post, caption: captionFor(t) });
+    // decrypt any stored OAuth token just for this publish call
+    const acct = { ...accounts[t] };
+    if (acct.token) acct.token = secure.decrypt(acct.token);
+    post.results[t] = await prov.publish(acct, { ...post, caption: captionFor(t) });
     if (post.results[t] && post.results[t].ok === false) {
       failures.push({ platform: prov.meta().name, error: post.results[t].error });
     }

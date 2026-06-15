@@ -23,7 +23,23 @@ const mediaThumb = (url, alt) => isVideo(url)
   : `<img src="${esc(url)}" alt="${esc(alt||'')}" onerror="this.style.display='none'"/>`;
 
 // ---------- bootstrap ----------
+const META_MSG = {
+  connected: '✅ Facebook/Instagram connected!',
+  nopage: 'Connected, but no Facebook Page was found on that account.',
+  denied: 'Connection canceled.',
+  expired: 'That connection link expired — please try again.',
+  error: 'Could not connect to Meta. Please try again.'
+};
+
 async function boot() {
+  // returning from Meta OAuth? show a message and clean the URL
+  const params = new URLSearchParams(location.search);
+  if (params.get('meta')) {
+    const msg = META_MSG[params.get('meta')] || '';
+    history.replaceState(null, '', location.pathname);
+    if (msg) setTimeout(() => toast(msg), 400);
+    state.view = 'connections';
+  }
   // arriving via a password-reset link? (/#reset=TOKEN)
   const resetMatch = location.hash.match(/^#reset=([0-9a-f]+)$/);
   if (resetMatch) return renderReset(resetMatch[1]);
@@ -530,11 +546,12 @@ function renderConnections(root) {
       </div>
       <div>${acc
         ? `<span class="badge ok">Connected</span> <button class="btn btn-ghost" data-disc="${p.id}">Disconnect</button>`
-        : `<button class="btn btn-primary" data-conn="${p.id}">Connect</button>`}</div>
+        : `<button class="btn btn-primary" data-conn="${p.id}" ${p.oauth ? 'data-oauth="1"' : ''}>Connect</button>`}</div>
     </div>`;
   }).join('');
 
   list.querySelectorAll('button[data-conn]').forEach(b => b.onclick = async () => {
+    if (b.dataset.oauth) { window.location.href = '/oauth/meta/start'; return; } // real Meta login (also links Instagram)
     const { accounts } = await api.post('/connect', { platform: b.dataset.conn });
     state.accounts = accounts; toast('Connected ' + platMeta(b.dataset.conn).name); renderConnections(root);
   });
