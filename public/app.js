@@ -536,9 +536,35 @@ function renderConnections(root) {
     <div id="connList" style="margin-top:8px;"></div>
   </div></div>`;
   const list = document.getElementById('connList');
-  list.innerHTML = state.platforms.map(p => {
+  const byId = id => state.platforms.find(p => p.id === id);
+  const fb = byId('facebook'), ig = byId('instagram');
+  let html = '';
+
+  // combined Facebook & Instagram row (one Meta login connects both)
+  if (fb && ig) {
+    const fbAcc = state.accounts.facebook, igAcc = state.accounts.instagram;
+    const oauth = fb.oauth;
+    const status = fbAcc
+      ? `<span class="subtle">${esc(fbAcc.handle)}${igAcc ? ` · ${esc(igAcc.handle)}` : ' · Instagram not linked'}</span>`
+      : `<span class="subtle">Not connected</span>`;
+    html += `<div class="conn-row">
+      <div class="conn-left">
+        <span class="chip" style="background:${fb.color}"><span class="dot"></span>Facebook</span>
+        <span class="chip" style="background:${ig.color}"><span class="dot"></span>Instagram</span>
+        ${status}
+        ${oauth ? '' : '<span class="badge no" title="API access pending approval">demo</span>'}
+      </div>
+      <div>${fbAcc
+        ? `<span class="badge ok">Connected</span> <button class="btn btn-ghost" data-disc-meta>Disconnect</button>`
+        : `<button class="btn btn-primary" data-conn-meta ${oauth ? 'data-oauth="1"' : ''}>Connect Facebook &amp; Instagram</button>`}</div>
+    </div>
+    <p class="subtle" style="font-size:.8rem; margin:-2px 0 6px;">One login connects your Facebook Page and the Instagram Business account linked to it.</p>`;
+  }
+
+  // remaining platforms, individually
+  state.platforms.filter(p => p.id !== 'facebook' && p.id !== 'instagram').forEach(p => {
     const acc = state.accounts[p.id];
-    return `<div class="conn-row">
+    html += `<div class="conn-row">
       <div class="conn-left">
         <span class="chip" style="background:${p.color}"><span class="dot"></span>${esc(p.name)}</span>
         ${acc ? `<span class="subtle">${esc(acc.handle)}</span>` : `<span class="subtle">Not connected</span>`}
@@ -548,10 +574,27 @@ function renderConnections(root) {
         ? `<span class="badge ok">Connected</span> <button class="btn btn-ghost" data-disc="${p.id}">Disconnect</button>`
         : `<button class="btn btn-primary" data-conn="${p.id}" ${p.oauth ? 'data-oauth="1"' : ''}>Connect</button>`}</div>
     </div>`;
-  }).join('');
+  });
+  list.innerHTML = html;
 
+  // combined Meta connect/disconnect
+  const connMeta = list.querySelector('button[data-conn-meta]');
+  if (connMeta) connMeta.onclick = async () => {
+    if (fb.oauth) { window.location.href = '/oauth/meta/start'; return; } // real Meta login (links both)
+    await api.post('/connect', { platform: 'facebook' });
+    const { accounts } = await api.post('/connect', { platform: 'instagram' });
+    state.accounts = accounts; toast('Connected Facebook & Instagram'); renderConnections(root);
+  };
+  const discMeta = list.querySelector('button[data-disc-meta]');
+  if (discMeta) discMeta.onclick = async () => {
+    await api.post('/disconnect', { platform: 'facebook' });
+    const { accounts } = await api.post('/disconnect', { platform: 'instagram' });
+    state.accounts = accounts; renderConnections(root);
+  };
+
+  // other platforms
   list.querySelectorAll('button[data-conn]').forEach(b => b.onclick = async () => {
-    if (b.dataset.oauth) { window.location.href = '/oauth/meta/start'; return; } // real Meta login (also links Instagram)
+    if (b.dataset.oauth) { window.location.href = '/oauth/meta/start'; return; }
     const { accounts } = await api.post('/connect', { platform: b.dataset.conn });
     state.accounts = accounts; toast('Connected ' + platMeta(b.dataset.conn).name); renderConnections(root);
   });
