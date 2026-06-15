@@ -40,6 +40,13 @@ function send(res, status, body, headers = {}) {
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
+// raw body (for form-encoded Meta callbacks)
+function readRaw(req) {
+  return new Promise(resolve => {
+    let data = ''; req.on('data', c => (data += c)); req.on('end', () => resolve(data)); req.on('error', () => resolve(''));
+  });
+}
+
 const MAX_BODY = 80 * 1024 * 1024; // 80MB — accommodates base64 image/short-video uploads
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -112,11 +119,12 @@ const server = http.createServer(async (req, res) => {
     try {
       const redirectUri = `${baseUrlFrom(req)}/oauth/meta/callback`;
       const userToken = await metaApi.exchangeCode(code, redirectUri);
+      const fbUserId = await metaApi.getUserId(userToken);
       const conn = await metaApi.getConnections(userToken);
       if (conn.pages[0]) {
         const pg = conn.pages[0];
         store.setAccount(entry.userId, 'facebook', {
-          handle: pg.name, pageId: pg.id, token: secure.encrypt(pg.token),
+          handle: pg.name, pageId: pg.id, token: secure.encrypt(pg.token), fbUserId,
           status: 'connected', connectedAt: new Date().toISOString()
         });
       }
@@ -124,7 +132,8 @@ const server = http.createServer(async (req, res) => {
         const ig = conn.instagram[0];
         store.setAccount(entry.userId, 'instagram', {
           handle: '@' + (ig.username || 'account'), id: ig.id, pageId: ig.pageId,
-          token: secure.encrypt(ig.token), status: 'connected', connectedAt: new Date().toISOString()
+          token: secure.encrypt(ig.token), fbUserId,
+          status: 'connected', connectedAt: new Date().toISOString()
         });
       }
       return redirect(res, conn.pages.length ? '/?meta=connected' : '/?meta=nopage');
@@ -132,6 +141,23 @@ const server = http.createServer(async (req, res) => {
       console.error('[meta oauth]', err.message);
       return redirect(res, '/?meta=error');
     }
+  }
+  // Meta pings this when a user removes the app → wipe their stored tokens.
+  if (p === '/oauth/meta/deauthorize' && req.method === 'POST') {
+    const body = await readRaw(req);
+    const signed = new URLSearchParams(body).get('signed_request');
+    const data = metaApi.parseSignedRequest(signed);
+    if (data && data.user_id) { const ids = store.purgeMetaUser(data.user_id); console.log('[meta] deauthorized; cleared', ids.length); }
+    return send(res, 200, { ok: true });
+  }
+  // Meta data-deletion request → remove the user's connected data, respond per spec.
+  if (p === '/oauth/meta/data-deletion' && req.method === 'POST') {
+    const body = await readRaw(req);
+    const signed = new URLSearchParams(body).get('signed_request');
+    const data = metaApi.parseSignedRequest(signed);
+    if (data && data.user_id) store.purgeMetaUser(data.user_id);
+    const code = crypto.randomBytes(8).toString('hex');
+    return send(res, 200, { url: `${baseUrlFrom(req)}/data-deletion.html`, confirmation_code: code });
   }
 
   // ---- API ----
