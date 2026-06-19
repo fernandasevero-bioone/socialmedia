@@ -320,11 +320,17 @@ const server = http.createServer(async (req, res) => {
             catch (e) { platformNote = 'Removed from the app, but Facebook deletion failed: ' + e.message; }
           }
         }
-        // Instagram post (requires instagram_manage_content)
+        // Instagram post — only attempt when instagram_manage_contents is an
+        // active scope (i.e. approved). Until then, guide the user.
         const igRes = existing.results.instagram, igAcc = accounts.instagram;
-        if (igRes && igRes.ok && igAcc && igAcc.token && igRes.platformId) {
-          try { await metaApi.deletePost({ ...igAcc, token: secure.decrypt(igAcc.token) }, igRes.platformId); }
-          catch (e) { platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app, but Instagram deletion failed: ' + e.message; }
+        if (igRes && igRes.ok) {
+          const igDeleteEnabled = metaApi.SCOPES.includes('instagram_manage_contents');
+          if (igDeleteEnabled && igAcc && igAcc.token && igRes.platformId) {
+            try { await metaApi.deletePost({ ...igAcc, token: secure.decrypt(igAcc.token) }, igRes.platformId); }
+            catch (e) { platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app, but Instagram deletion failed: ' + e.message; }
+          } else {
+            platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app. To remove it from Instagram, delete it in the Instagram app.';
+          }
         }
       }
       store.deletePost(user.id, id);

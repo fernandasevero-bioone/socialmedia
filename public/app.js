@@ -46,12 +46,30 @@ const META_MSG = {
   error: 'Could not connect to Meta. Please try again.'
 };
 
+// The OAuth tab posts back here when it finishes — refresh the connection state.
+window.addEventListener('message', async ev => {
+  if (ev.origin !== location.origin || !ev.data || ev.data.type !== 'meta') return;
+  if (META_MSG[ev.data.status]) toast(META_MSG[ev.data.status]);
+  if (state.user && (ev.data.status === 'connected' || ev.data.status === 'nopage')) {
+    await loadData();
+    if (state.view !== 'connections') { state.view = 'connections'; history.pushState({ view: 'connections' }, '', '/' + slugForView('connections')); }
+    renderView();
+  }
+});
+
 async function boot() {
+  const params = new URLSearchParams(location.search);
+  // If this is the OAuth tab we opened, tell the main tab and close ourselves.
+  if (params.get('meta') && window.opener && window.opener !== window) {
+    try { window.opener.postMessage({ type: 'meta', status: params.get('meta') }, location.origin); } catch {}
+    document.body.innerHTML = '<p style="font-family:sans-serif;padding:40px;text-align:center;">Done! You can close this tab.</p>';
+    window.close();
+    return;
+  }
   // initial view from the URL slug (e.g. /calendar)
   const fromPath = viewFromPath();
   if (fromPath) state.view = fromPath;
-  // returning from Meta OAuth? show a message and land on My Accounts
-  const params = new URLSearchParams(location.search);
+  // returning from Meta OAuth in the SAME tab (fallback if popup was blocked)
   if (params.get('meta')) {
     const msg = META_MSG[params.get('meta')] || '';
     state.view = 'connections';
@@ -628,7 +646,7 @@ function renderConnections(root) {
   // combined Meta connect/disconnect
   const connMeta = list.querySelector('button[data-conn-meta]');
   if (connMeta) connMeta.onclick = () => {
-    if (fb.oauth) { connMeta.classList.add('is-busy'); connMeta.innerHTML = '<span class="spinner"></span> Redirecting…'; window.location.href = '/oauth/meta/start'; return; }
+    if (fb.oauth) { window.open('/oauth/meta/start', '_blank'); toast('Continue in the new tab to connect…'); return; }
     withBusy(connMeta, async () => {
       await api.post('/connect', { platform: 'facebook' });
       const { accounts } = await api.post('/connect', { platform: 'instagram' });
@@ -644,7 +662,7 @@ function renderConnections(root) {
 
   // other platforms
   list.querySelectorAll('button[data-conn]').forEach(b => b.onclick = () => {
-    if (b.dataset.oauth) { window.location.href = '/oauth/meta/start'; return; }
+    if (b.dataset.oauth) { window.open('/oauth/meta/start', '_blank'); toast('Continue in the new tab to connect…'); return; }
     withBusy(b, async () => {
       const { accounts } = await api.post('/connect', { platform: b.dataset.conn });
       state.accounts = accounts; toast('Connected ' + platMeta(b.dataset.conn).name); renderConnections(root);
