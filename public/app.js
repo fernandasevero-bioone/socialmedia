@@ -723,14 +723,13 @@ async function renderHistory(root) {
 
   root.querySelectorAll('button[data-del-post]').forEach(b => b.onclick = () => {
     const post = posts.find(p => p.id === b.dataset.delPost);
-    const published = post && post.status === 'published';
-    if (!confirm(published
-      ? 'Delete this post? It will be removed from the app and from the connected Facebook/Instagram accounts it was posted to.'
-      : 'Delete this scheduled post? It will not be published.')) return;
+    if (!post) return;
+    if (post.status === 'published') return openDeleteModal(post, () => renderHistory(root));
+    if (!confirm('Delete this scheduled post? It will not be published.')) return;
     withBusy(b, async () => {
       try {
-        const { note } = await api.post('/posts/delete', { id: b.dataset.delPost });
-        toast(note || 'Post deleted');
+        await api.post('/posts/delete', { id: post.id });
+        toast('Post deleted');
         renderHistory(root);
       } catch (err) { toast(err.error || 'Delete failed'); }
     });
@@ -938,13 +937,49 @@ function openPostModal(post, onChange) {
     };
   } else {
     overlay.querySelector('#mDelete').onclick = () => {
-      if (!confirm('Delete this post? It will be removed from the app and from the connected Facebook/Instagram accounts it was posted to.')) return;
-      withBusy(overlay.querySelector('#mDelete'), async () => {
-        try { const { note } = await api.post('/posts/delete', { id: post.id }); toast(note || 'Post deleted'); close(); onChange(); }
-        catch (err) { toast(err.error || 'Delete failed'); }
-      });
+      close();
+      openDeleteModal(post, onChange);
     };
   }
+}
+
+// chooser for deleting a PUBLISHED post: pick which platforms to remove it
+// from (all pre-checked = delete everywhere + remove from the app).
+function openDeleteModal(post, onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card" style="width:min(440px,94vw);">
+      <h2 style="margin:0 0 4px;">Delete post</h2>
+      <p class="subtle" style="font-size:.9rem;">Choose where to delete this post from:</p>
+      <div id="delPlats" style="display:flex; flex-direction:column; gap:8px; margin:12px 0;">
+        ${post.platforms.map(t => `
+          <label class="del-row">
+            <input type="checkbox" value="${esc(t)}" checked />
+            <span class="chip" style="background:${platMeta(t).color}"><span class="dot"></span>${esc(platMeta(t).name)}</span>
+          </label>`).join('')}
+      </div>
+      <p class="subtle" style="font-size:.78rem;">Unchecked platforms keep their post. If everything is checked, the post is also removed from the app.</p>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button class="btn btn-primary" id="delGo" style="background:var(--bo-pink);">Delete selected</button>
+        <button class="btn btn-ghost" id="delCancel">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.onclick = ev => { if (ev.target === overlay) close(); };
+  overlay.querySelector('#delCancel').onclick = close;
+  overlay.querySelector('#delGo').onclick = () => {
+    const picked = [...overlay.querySelectorAll('#delPlats input:checked')].map(i => i.value);
+    if (!picked.length) return toast('Pick at least one platform');
+    withBusy(overlay.querySelector('#delGo'), async () => {
+      try {
+        const { note, remaining } = await api.post('/posts/delete', { id: post.id, platforms: picked });
+        toast(note || (remaining ? 'Deleted from the selected platforms' : 'Post deleted'));
+        close(); onDone();
+      } catch (err) { toast(err.error || 'Delete failed'); }
+    }, 'Deleting…');
+  };
 }
 
 function blankDraft() {

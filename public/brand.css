@@ -226,6 +226,10 @@ textarea:focus { outline:none; border-color: var(--bo-blue); }
   border:0; cursor:pointer; font-family:inherit; text-align:left; width:100%; transition:filter .15s, transform .15s; }
 .cal-ev:hover { filter:brightness(1.12); transform:translateY(-1px); }
 
+/* delete-post platform picker */
+.del-row { display:flex; align-items:center; gap:10px; cursor:pointer; }
+.del-row input { width:18px; height:18px; accent-color: var(--bo-pink); cursor:pointer; }
+
 /* Modal */
 .modal-overlay { position:fixed; inset:0; background:rgba(36,36,40,.55); display:grid; place-items:center; z-index:50; padding:20px; }
 .modal-card { background:#fff; border-radius:16px; box-shadow:var(--shadow-lg); padding:22px; width:min(520px, 94vw); max-height:88vh; overflow:auto; }

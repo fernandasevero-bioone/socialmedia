@@ -339,43 +339,56 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { post: store.updatePost(user.id, id, fields) });
     }
     if (p === '/api/posts/delete' && req.method === 'POST') {
-      // remove a post from the app (works for scheduled OR published). For a
-      // published Facebook post, also best-effort delete it from the Page.
-      const { id } = await readBody(req);
+      // Delete a post. Scheduled → cancel entirely. Published → the caller may
+      // pick WHICH platforms to delete from ({ platforms: [...] }); omitted
+      // means all. If platforms remain, the post record stays with the rest.
+      const { id, platforms: pick } = await readBody(req);
       const existing = store.getPost(user.id, id);
       if (!existing) return send(res, 404, { error: 'Post not found' });
+
+      if (existing.status !== 'published') {
+        store.deletePost(user.id, id);
+        return send(res, 200, { ok: true });
+      }
+
+      const targets = Array.isArray(pick) && pick.length
+        ? existing.platforms.filter(t => pick.includes(t))
+        : [...existing.platforms];
+      if (!targets.length) return send(res, 400, { error: 'Pick at least one platform' });
+
+      const accounts = store.getAccounts(user.id);
+      const results = existing.results || {};
       let platformNote = null;
-      if (existing.status === 'published' && existing.results && metaApi.isConfigured()) {
-        const accounts = store.getAccounts(user.id);
-        // Facebook Page post
-        const fbRes = existing.results.facebook, fbAcc = accounts.facebook;
-        if (fbRes && fbRes.ok && fbAcc && fbAcc.token) {
-          const postId = fbRes.platformId || (fbRes.externalUrl || '').split('facebook.com/')[1];
-          if (postId) {
-            try { await metaApi.deletePost({ ...fbAcc, token: secure.decrypt(fbAcc.token) }, postId); }
-            catch (e) { platformNote = 'Removed from the app, but Facebook deletion failed: ' + e.message; }
+      const note = msg => { platformNote = (platformNote ? platformNote + ' ' : '') + msg; };
+
+      for (const t of targets) {
+        const r = results[t];
+        if (!r || !r.ok || r.demo) continue; // nothing real to remove
+        try {
+          if (t === 'facebook' && metaApi.isConfigured() && accounts.facebook && accounts.facebook.token) {
+            const postId = r.platformId || (r.externalUrl || '').split('facebook.com/')[1];
+            if (postId) await metaApi.deletePost({ ...accounts.facebook, token: secure.decrypt(accounts.facebook.token) }, postId);
+          } else if (t === 'instagram' && metaApi.isConfigured()) {
+            const canDelete = metaApi.SCOPES.includes('instagram_manage_contents');
+            if (canDelete && accounts.instagram && accounts.instagram.token && r.platformId) {
+              await metaApi.deletePost({ ...accounts.instagram, token: secure.decrypt(accounts.instagram.token) }, r.platformId);
+            } else {
+              note('To remove it from Instagram, delete it in the Instagram app.');
+            }
+          } else if (t === 'linkedin' && linkedinApi.isConfigured() && accounts.linkedin && accounts.linkedin.token && r.platformId) {
+            await linkedinApi.deleteOrgPost({ ...accounts.linkedin, token: secure.decrypt(accounts.linkedin.token) }, r.platformId);
           }
-        }
-        // Instagram post — only attempt when instagram_manage_contents is an
-        // active scope (i.e. approved). Until then, guide the user.
-        const igRes = existing.results.instagram, igAcc = accounts.instagram;
-        if (igRes && igRes.ok) {
-          const igDeleteEnabled = metaApi.SCOPES.includes('instagram_manage_contents');
-          if (igDeleteEnabled && igAcc && igAcc.token && igRes.platformId) {
-            try { await metaApi.deletePost({ ...igAcc, token: secure.decrypt(igAcc.token) }, igRes.platformId); }
-            catch (e) { platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app, but Instagram deletion failed: ' + e.message; }
-          } else {
-            platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app. To remove it from Instagram, delete it in the Instagram app.';
-          }
+        } catch (e) {
+          note(`${providers.get(t) ? providers.get(t).meta().name : t} deletion failed: ${e.message}.`);
         }
       }
-      // LinkedIn Company Page post
-      if (existing.status === 'published' && existing.results && linkedinApi.isConfigured()) {
-        const liRes = existing.results.linkedin, liAcc = store.getAccounts(user.id).linkedin;
-        if (liRes && liRes.ok && liRes.platformId && liAcc && liAcc.token) {
-          try { await linkedinApi.deleteOrgPost({ ...liAcc, token: secure.decrypt(liAcc.token) }, liRes.platformId); }
-          catch (e) { platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app, but LinkedIn deletion failed: ' + e.message; }
-        }
+
+      const remaining = existing.platforms.filter(t => !targets.includes(t));
+      if (remaining.length) {
+        const newResults = { ...results };
+        targets.forEach(t => delete newResults[t]);
+        store.updatePostById(id, { platforms: remaining, results: newResults });
+        return send(res, 200, { ok: true, note: platformNote, remaining });
       }
       store.deletePost(user.id, id);
       return send(res, 200, { ok: true, note: platformNote });
