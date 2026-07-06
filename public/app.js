@@ -38,19 +38,35 @@ const mediaThumb = (url, alt) => isVideo(url)
   : `<img src="${esc(url)}" alt="${esc(alt||'')}" onerror="this.style.display='none'"/>`;
 
 // ---------- bootstrap ----------
-const META_MSG = {
-  connected: '✅ Facebook/Instagram connected!',
-  nopage: 'Connected, but no Facebook Page was found on that account.',
-  denied: 'Connection canceled.',
-  expired: 'That connection link expired — please try again.',
-  error: 'Could not connect to Meta. Please try again.'
+const OAUTH_MSG = {
+  meta: {
+    connected: '✅ Facebook/Instagram connected!',
+    nopage: 'Connected, but no Facebook Page was found on that account.',
+    denied: 'Connection canceled.',
+    expired: 'That connection link expired — please try again.',
+    error: 'Could not connect to Meta. Please try again.'
+  },
+  linkedin: {
+    connected: '✅ LinkedIn Company Page connected!',
+    noorg: 'Connected, but you are not an admin of any LinkedIn Company Page.',
+    denied: 'Connection canceled.',
+    expired: 'That connection link expired — please try again.',
+    error: 'Could not connect to LinkedIn. Please try again.'
+  }
 };
+function oauthReturn(params) {
+  for (const prov of Object.keys(OAUTH_MSG)) {
+    if (params.get(prov)) return { prov, status: params.get(prov) };
+  }
+  return null;
+}
 
 // The OAuth tab posts back here when it finishes — refresh the connection state.
 window.addEventListener('message', async ev => {
-  if (ev.origin !== location.origin || !ev.data || ev.data.type !== 'meta') return;
-  if (META_MSG[ev.data.status]) toast(META_MSG[ev.data.status]);
-  if (state.user && (ev.data.status === 'connected' || ev.data.status === 'nopage')) {
+  if (ev.origin !== location.origin || !ev.data || !OAUTH_MSG[ev.data.type]) return;
+  const msg = OAUTH_MSG[ev.data.type][ev.data.status];
+  if (msg) toast(msg);
+  if (state.user && ['connected', 'nopage', 'noorg'].includes(ev.data.status)) {
     await loadData();
     if (state.view !== 'connections') { state.view = 'connections'; history.pushState({ view: 'connections' }, '', '/' + slugForView('connections')); }
     renderView();
@@ -59,9 +75,10 @@ window.addEventListener('message', async ev => {
 
 async function boot() {
   const params = new URLSearchParams(location.search);
+  const ret = oauthReturn(params);
   // If this is the OAuth tab we opened, tell the main tab and close ourselves.
-  if (params.get('meta') && window.opener && window.opener !== window) {
-    try { window.opener.postMessage({ type: 'meta', status: params.get('meta') }, location.origin); } catch {}
+  if (ret && window.opener && window.opener !== window) {
+    try { window.opener.postMessage({ type: ret.prov, status: ret.status }, location.origin); } catch {}
     document.body.innerHTML = '<p style="font-family:sans-serif;padding:40px;text-align:center;">Done! You can close this tab.</p>';
     window.close();
     return;
@@ -69,9 +86,9 @@ async function boot() {
   // initial view from the URL slug (e.g. /calendar)
   const fromPath = viewFromPath();
   if (fromPath) state.view = fromPath;
-  // returning from Meta OAuth in the SAME tab (fallback if popup was blocked)
-  if (params.get('meta')) {
-    const msg = META_MSG[params.get('meta')] || '';
+  // returning from OAuth in the SAME tab (fallback if popup was blocked)
+  if (ret) {
+    const msg = OAUTH_MSG[ret.prov][ret.status] || '';
     state.view = 'connections';
     history.replaceState(null, '', '/' + slugForView('connections'));
     if (msg) setTimeout(() => toast(msg), 400);
@@ -662,10 +679,11 @@ function renderConnections(root) {
 
   // other platforms
   list.querySelectorAll('button[data-conn]').forEach(b => b.onclick = () => {
-    if (b.dataset.oauth) { window.open('/oauth/meta/start', '_blank'); toast('Continue in the new tab to connect…'); return; }
+    const pm = platMeta(b.dataset.conn);
+    if (b.dataset.oauth && pm.connectUrl) { window.open(pm.connectUrl, '_blank'); toast('Continue in the new tab to connect…'); return; }
     withBusy(b, async () => {
       const { accounts } = await api.post('/connect', { platform: b.dataset.conn });
-      state.accounts = accounts; toast('Connected ' + platMeta(b.dataset.conn).name); renderConnections(root);
+      state.accounts = accounts; toast('Connected ' + pm.name); renderConnections(root);
     }, 'Connecting…');
   });
   list.querySelectorAll('button[data-disc]').forEach(b => b.onclick = () => withBusy(b, async () => {

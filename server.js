@@ -18,6 +18,7 @@ const library = require('./lib/library');
 const providers = require('./lib/providers');
 const mailer = require('./lib/mailer');
 const metaApi = require('./lib/meta');
+const linkedinApi = require('./lib/linkedin');
 const secure = require('./lib/secure');
 
 const oauthStates = new Map(); // state -> { userId, ts }
@@ -142,6 +143,41 @@ const server = http.createServer(async (req, res) => {
       return redirect(res, '/?meta=error');
     }
   }
+  // ---- LinkedIn OAuth (Company Pages) ----
+  if (p === '/oauth/linkedin/start') {
+    const user = currentUser(req);
+    if (!user) return redirect(res, '/');
+    if (!linkedinApi.isConfigured()) return send(res, 503, { error: 'LinkedIn is not configured yet (set LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET).' });
+    const state = crypto.randomBytes(16).toString('hex');
+    oauthStates.set(state, { userId: user.id, ts: Date.now(), provider: 'linkedin' });
+    const redirectUri = `${baseUrlFrom(req)}/oauth/linkedin/callback`;
+    return redirect(res, linkedinApi.authUrl(redirectUri, state));
+  }
+  if (p === '/oauth/linkedin/callback') {
+    const state = url.searchParams.get('state');
+    const code = url.searchParams.get('code');
+    const entry = state && oauthStates.get(state);
+    oauthStates.delete(state);
+    if (url.searchParams.get('error') || !code || !entry) return redirect(res, '/?linkedin=denied');
+    if (Date.now() - entry.ts > 10 * 60 * 1000) return redirect(res, '/?linkedin=expired');
+    try {
+      const redirectUri = `${baseUrlFrom(req)}/oauth/linkedin/callback`;
+      const token = await linkedinApi.exchangeCode(code, redirectUri);
+      const orgs = await linkedinApi.getOrganizations(token);
+      if (!orgs.length) return redirect(res, '/?linkedin=noorg');
+      const org = orgs[0]; // first Page they administer (their location's Page)
+      store.setAccount(entry.userId, 'linkedin', {
+        handle: org.name, orgId: org.id, orgUrn: org.urn,
+        token: secure.encrypt(token),
+        status: 'connected', connectedAt: new Date().toISOString()
+      });
+      return redirect(res, '/?linkedin=connected');
+    } catch (err) {
+      console.error('[linkedin oauth]', err.message);
+      return redirect(res, '/?linkedin=error');
+    }
+  }
+
   // Meta pings this when a user removes the app → wipe their stored tokens.
   if (p === '/oauth/meta/deauthorize' && req.method === 'POST') {
     const body = await readRaw(req);
@@ -331,6 +367,14 @@ const server = http.createServer(async (req, res) => {
           } else {
             platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app. To remove it from Instagram, delete it in the Instagram app.';
           }
+        }
+      }
+      // LinkedIn Company Page post
+      if (existing.status === 'published' && existing.results && linkedinApi.isConfigured()) {
+        const liRes = existing.results.linkedin, liAcc = store.getAccounts(user.id).linkedin;
+        if (liRes && liRes.ok && liRes.platformId && liAcc && liAcc.token) {
+          try { await linkedinApi.deleteOrgPost({ ...liAcc, token: secure.decrypt(liAcc.token) }, liRes.platformId); }
+          catch (e) { platformNote = (platformNote ? platformNote + ' ' : '') + 'Removed from the app, but LinkedIn deletion failed: ' + e.message; }
         }
       }
       store.deletePost(user.id, id);
