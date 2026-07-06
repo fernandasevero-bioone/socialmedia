@@ -19,6 +19,7 @@ const providers = require('./lib/providers');
 const mailer = require('./lib/mailer');
 const metaApi = require('./lib/meta');
 const linkedinApi = require('./lib/linkedin');
+const tiktokApi = require('./lib/tiktok');
 const secure = require('./lib/secure');
 
 const oauthStates = new Map(); // state -> { userId, ts }
@@ -175,6 +176,41 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       console.error('[linkedin oauth]', err.message);
       return redirect(res, '/?linkedin=error');
+    }
+  }
+
+  // ---- TikTok OAuth ----
+  if (p === '/oauth/tiktok/start') {
+    const user = currentUser(req);
+    if (!user) return redirect(res, '/');
+    if (!tiktokApi.isConfigured()) return send(res, 503, { error: 'TikTok is not configured yet (set TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET).' });
+    const state = crypto.randomBytes(16).toString('hex');
+    oauthStates.set(state, { userId: user.id, ts: Date.now(), provider: 'tiktok' });
+    const redirectUri = `${baseUrlFrom(req)}/oauth/tiktok/callback`;
+    return redirect(res, tiktokApi.authUrl(redirectUri, state));
+  }
+  if (p === '/oauth/tiktok/callback') {
+    const state = url.searchParams.get('state');
+    const code = url.searchParams.get('code');
+    const entry = state && oauthStates.get(state);
+    oauthStates.delete(state);
+    if (url.searchParams.get('error') || !code || !entry) return redirect(res, '/?tiktok=denied');
+    if (Date.now() - entry.ts > 10 * 60 * 1000) return redirect(res, '/?tiktok=expired');
+    try {
+      const redirectUri = `${baseUrlFrom(req)}/oauth/tiktok/callback`;
+      const t = await tiktokApi.exchangeCode(code, redirectUri);
+      let displayName = 'TikTok account';
+      try { const u = await tiktokApi.getUserInfo(t.token); displayName = u.display_name || displayName; } catch {}
+      store.setAccount(entry.userId, 'tiktok', {
+        handle: '@' + displayName.replace(/^@/, ''), openId: t.openId,
+        token: secure.encrypt(t.token), refreshToken: secure.encrypt(t.refreshToken),
+        expiresAt: t.expiresAt,
+        status: 'connected', connectedAt: new Date().toISOString()
+      });
+      return redirect(res, '/?tiktok=connected');
+    } catch (err) {
+      console.error('[tiktok oauth]', err.message);
+      return redirect(res, '/?tiktok=error');
     }
   }
 
@@ -377,6 +413,8 @@ const server = http.createServer(async (req, res) => {
             }
           } else if (t === 'linkedin' && linkedinApi.isConfigured() && accounts.linkedin && accounts.linkedin.token && r.platformId) {
             await linkedinApi.deleteOrgPost({ ...accounts.linkedin, token: secure.decrypt(accounts.linkedin.token) }, r.platformId);
+          } else if (t === 'tiktok') {
+            note('To remove it from TikTok, delete it in the TikTok app (TikTok does not allow deleting posts via API).');
           }
         } catch (e) {
           note(`${providers.get(t) ? providers.get(t).meta().name : t} deletion failed: ${e.message}.`);
@@ -464,10 +502,22 @@ async function deliverPost(post, accounts) {
       failures.push({ platform: prov.meta().name, error: 'account no longer connected' });
       continue;
     }
-    // decrypt any stored OAuth token just for this publish call
+    // decrypt any stored OAuth tokens just for this publish call
     const acct = { ...accounts[t] };
     if (acct.token) acct.token = secure.decrypt(acct.token);
+    if (acct.refreshToken) acct.refreshToken = secure.decrypt(acct.refreshToken);
     post.results[t] = await prov.publish(acct, { ...post, caption: captionFor(t) });
+    // a provider may have refreshed short-lived tokens (TikTok) — persist them
+    const renewed = post.results[t] && post.results[t]._updatedAccount;
+    if (renewed && post.franchiseeId) {
+      store.setAccount(post.franchiseeId, t, {
+        ...accounts[t],
+        token: secure.encrypt(renewed.token),
+        refreshToken: secure.encrypt(renewed.refreshToken),
+        expiresAt: renewed.expiresAt
+      });
+      delete post.results[t]._updatedAccount;
+    }
     if (post.results[t] && post.results[t].ok === false) {
       failures.push({ platform: prov.meta().name, error: post.results[t].error });
     }

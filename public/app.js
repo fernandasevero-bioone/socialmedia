@@ -52,6 +52,12 @@ const OAUTH_MSG = {
     denied: 'Connection canceled.',
     expired: 'That connection link expired — please try again.',
     error: 'Could not connect to LinkedIn. Please try again.'
+  },
+  tiktok: {
+    connected: '✅ TikTok connected!',
+    denied: 'Connection canceled.',
+    expired: 'That connection link expired — please try again.',
+    error: 'Could not connect to TikTok. Please try again.'
   }
 };
 function oauthReturn(params) {
