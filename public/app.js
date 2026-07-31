@@ -50,6 +50,7 @@ const OAUTH_MSG = {
   },
   linkedin: {
     connected: '✅ LinkedIn Company Page connected!',
+    pick: '✅ Connected! You manage more than one Page — pick which one to post to below.',
     noorg: 'Connected, but you are not an admin of any LinkedIn Company Page.',
     denied: 'Connection canceled.',
     expired: 'That connection link expired — please try again.',
@@ -81,7 +82,7 @@ window.addEventListener('message', async ev => {
   if (ev.origin !== location.origin || !ev.data || !OAUTH_MSG[ev.data.type]) return;
   const msg = OAUTH_MSG[ev.data.type][ev.data.status];
   if (msg) toast(msg);
-  if (state.user && ['connected', 'nopage', 'noorg', 'noboard'].includes(ev.data.status)) {
+  if (state.user && ['connected', 'nopage', 'noorg', 'noboard', 'pick'].includes(ev.data.status)) {
     await loadData();
     if (state.view !== 'connections') { state.view = 'connections'; history.pushState({ view: 'connections' }, '', '/' + slugForView('connections')); }
     renderView();
@@ -672,7 +673,14 @@ function renderConnections(root) {
   // remaining platforms, individually
   state.platforms.filter(p => p.id !== 'facebook' && p.id !== 'instagram').forEach(p => {
     const acc = state.accounts[p.id];
-    html += `<div class="conn-row">
+    // LinkedIn Page picker (when the franchisee administers more than one Page)
+    const pagePicker = (p.id === 'linkedin' && acc && acc.orgs && acc.orgs.length > 1)
+      ? `<div style="margin-top:6px;"><label class="subtle" style="font-size:.82rem;">Post to this Page:
+          <select data-li-page style="margin-left:6px; padding:6px 8px; border:1.5px solid var(--bo-gray-light); border-radius:8px; font-family:inherit;">
+            ${acc.orgs.map(o => `<option value="${esc(o.id)}" ${o.id === acc.orgId ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}
+          </select></label></div>`
+      : '';
+    html += `<div class="conn-row" style="flex-wrap:wrap;">
       <div class="conn-left">
         <span class="chip" style="background:${p.color}"><span class="dot"></span>${esc(p.name)}</span>
         ${acc ? `<span class="subtle">${esc(acc.handle)}</span>` : `<span class="subtle">Not connected</span>`}
@@ -681,6 +689,7 @@ function renderConnections(root) {
       <div>${acc
         ? `<span class="badge ok">Connected</span> <button class="btn btn-ghost" data-disc="${p.id}">Disconnect</button>`
         : `<button class="btn btn-primary" data-conn="${p.id}" ${p.oauth ? 'data-oauth="1"' : ''}>Connect</button>`}</div>
+      ${pagePicker ? `<div style="flex-basis:100%;">${pagePicker}</div>` : ''}
     </div>`;
   });
   list.innerHTML = html;
@@ -715,6 +724,13 @@ function renderConnections(root) {
     const { accounts } = await api.post('/disconnect', { platform: b.dataset.disc });
     state.accounts = accounts; renderConnections(root);
   }));
+  const liPage = list.querySelector('select[data-li-page]');
+  if (liPage) liPage.onchange = async () => {
+    try {
+      const { accounts } = await api.post('/linkedin/select-page', { orgId: liPage.value });
+      state.accounts = accounts; toast('LinkedIn Page updated'); renderConnections(root);
+    } catch (err) { toast(err.error || 'Could not switch Page'); }
+  };
 }
 
 // ---------- history ----------

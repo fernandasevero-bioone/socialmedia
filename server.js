@@ -23,7 +23,7 @@ const tiktokApi = require('./lib/tiktok');
 const pinterestApi = require('./lib/pinterest');
 const secure = require('./lib/secure');
 
-const BUILD = 'history-status-2026-07'; // bump on each deploy-relevant change; check via /api/version
+const BUILD = 'linkedin-page-picker-2026-07'; // bump on each deploy-relevant change; check via /api/version
 const oauthStates = new Map(); // state -> { userId, ts }
 function baseUrlFrom(req) {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
@@ -168,13 +168,15 @@ const server = http.createServer(async (req, res) => {
       const token = await linkedinApi.exchangeCode(code, redirectUri);
       const orgs = await linkedinApi.getOrganizations(token);
       if (!orgs.length) return redirect(res, '/?linkedin=noorg');
-      const org = orgs[0]; // first Page they administer (their location's Page)
+      const org = orgs[0]; // default to first; user can switch if they admin several
       store.setAccount(entry.userId, 'linkedin', {
         handle: org.name, orgId: org.id, orgUrn: org.urn,
+        orgs, // full list of Pages they administer, for the page picker
         token: secure.encrypt(token),
         status: 'connected', connectedAt: new Date().toISOString()
       });
-      return redirect(res, '/?linkedin=connected');
+      // if they manage more than one Page, send them to pick the right one
+      return redirect(res, orgs.length > 1 ? '/?linkedin=pick' : '/?linkedin=connected');
     } catch (err) {
       console.error('[linkedin oauth]', err.message);
       return redirect(res, '/?linkedin=error');
@@ -393,6 +395,15 @@ const server = http.createServer(async (req, res) => {
       if (!prov) return send(res, 400, { error: 'unknown platform' });
       const info = await prov.connect(user.id, { handle });
       const accounts = store.setAccount(user.id, platform, info);
+      return send(res, 200, { accounts });
+    }
+    if (p === '/api/linkedin/select-page' && req.method === 'POST') {
+      const { orgId } = await readBody(req);
+      const acc = store.getAccounts(user.id).linkedin;
+      if (!acc || !acc.orgs) return send(res, 400, { error: 'No LinkedIn Pages to choose from' });
+      const org = acc.orgs.find(o => o.id === orgId);
+      if (!org) return send(res, 404, { error: 'Page not found' });
+      const accounts = store.setAccount(user.id, 'linkedin', { ...acc, orgId: org.id, orgUrn: org.urn, handle: org.name });
       return send(res, 200, { accounts });
     }
     if (p === '/api/disconnect' && req.method === 'POST') {
