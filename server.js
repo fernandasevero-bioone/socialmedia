@@ -550,6 +550,9 @@ async function deliverPost(post, accounts) {
     if (acct.token) acct.token = secure.decrypt(acct.token);
     if (acct.refreshToken) acct.refreshToken = secure.decrypt(acct.refreshToken);
     post.results[t] = await prov.publish(acct, { ...post, caption: captionFor(t) });
+    if (post.results[t] && post.results[t].ok === false) {
+      console.error(`[publish] ${t} FAILED for ${post.franchiseeId}: ${post.results[t].error}`);
+    }
     // a provider may have refreshed short-lived tokens (TikTok) — persist them
     const renewed = post.results[t] && post.results[t]._updatedAccount;
     if (renewed && post.franchiseeId) {
