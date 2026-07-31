@@ -355,6 +355,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/disconnect' && req.method === 'POST') {
       const { platform } = await readBody(req);
+      const acct = store.getAccounts(user.id)[platform];
+      if (platform === 'linkedin' && linkedinApi.isConfigured() && acct && acct.token) {
+        await linkedinApi.revokeToken(secure.decrypt(acct.token)); // release the LinkedIn authorization
+      }
       return send(res, 200, { accounts: store.removeAccount(user.id, platform) });
     }
     if (p === '/api/posts' && req.method === 'GET') {
