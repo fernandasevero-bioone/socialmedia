@@ -9,10 +9,12 @@ const api = {
   async post(p, b)  { const r = await fetch('/api' + p, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b||{}) }); const j = await r.json(); if (!r.ok) throw j; return j; }
 };
 
-function toast(msg) {
+let toastTimer;
+function toast(msg, ms = 2600) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2600);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
 // Run an async action with a spinner on the clicked button (so it visibly
@@ -597,10 +599,20 @@ function renderComposer(root) {
       ? Object.fromEntries(e.platforms.map(t => [t, e.captions[t] != null ? e.captions[t] : e.caption]))
       : null;
     try {
-      await api.post('/publish', { libraryId: e.libraryId, caption: e.caption, captions,
+      const { post } = await api.post('/publish', { libraryId: e.libraryId, caption: e.caption, captions,
         category: e.category || '', media: e.media, platforms: e.platforms, scheduledFor });
-      toast(scheduledFor ? '🗓️ Scheduled!' : '✅ Published to ' + e.platforms.length + ' account(s)');
-      state.editing = null; go(scheduledFor ? 'calendar' : 'history');
+      if (scheduledFor) { toast('🗓️ Scheduled!'); state.editing = null; go('calendar'); return; }
+      // surface any per-platform failures instead of a blanket "published"
+      const results = post.results || {};
+      const failed = e.platforms.filter(t => results[t] && results[t].ok === false);
+      const ok = e.platforms.filter(t => results[t] && results[t].ok !== false);
+      if (failed.length) {
+        const detail = failed.map(t => `${platMeta(t).name}: ${results[t].error || 'failed'}`).join(' · ');
+        toast(`⚠️ ${ok.length ? 'Some posted. ' : 'Not posted. '}${detail}`, 9000);
+      } else {
+        toast('✅ Published to ' + ok.length + ' account(s)');
+      }
+      state.editing = null; go('history');
     } catch (err) { toast(err.error || 'Publish failed'); }
   };
   const pubNow = document.getElementById('pubNow'); if (pubNow) pubNow.onclick = () => withBusy(pubNow, () => publish(null), 'Publishing…');
