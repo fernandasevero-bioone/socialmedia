@@ -20,6 +20,7 @@ const mailer = require('./lib/mailer');
 const metaApi = require('./lib/meta');
 const linkedinApi = require('./lib/linkedin');
 const tiktokApi = require('./lib/tiktok');
+const pinterestApi = require('./lib/pinterest');
 const secure = require('./lib/secure');
 
 const oauthStates = new Map(); // state -> { userId, ts }
@@ -211,6 +212,42 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       console.error('[tiktok oauth]', err.message);
       return redirect(res, '/?tiktok=error');
+    }
+  }
+
+  // ---- Pinterest OAuth ----
+  if (p === '/oauth/pinterest/start') {
+    const user = currentUser(req);
+    if (!user) return redirect(res, '/');
+    if (!pinterestApi.isConfigured()) return send(res, 503, { error: 'Pinterest is not configured yet (set PINTEREST_APP_ID / PINTEREST_APP_SECRET).' });
+    const state = crypto.randomBytes(16).toString('hex');
+    oauthStates.set(state, { userId: user.id, ts: Date.now(), provider: 'pinterest' });
+    const redirectUri = `${baseUrlFrom(req)}/oauth/pinterest/callback`;
+    return redirect(res, pinterestApi.authUrl(redirectUri, state));
+  }
+  if (p === '/oauth/pinterest/callback') {
+    const state = url.searchParams.get('state');
+    const code = url.searchParams.get('code');
+    const entry = state && oauthStates.get(state);
+    oauthStates.delete(state);
+    if (url.searchParams.get('error') || !code || !entry) return redirect(res, '/?pinterest=denied');
+    if (Date.now() - entry.ts > 10 * 60 * 1000) return redirect(res, '/?pinterest=expired');
+    try {
+      const redirectUri = `${baseUrlFrom(req)}/oauth/pinterest/callback`;
+      const token = await pinterestApi.exchangeCode(code, redirectUri);
+      const boards = await pinterestApi.getBoards(token);
+      if (!boards.length) return redirect(res, '/?pinterest=noboard');
+      const username = await pinterestApi.getUsername(token);
+      const board = boards[0]; // first board (franchisee can create/rename in Pinterest)
+      store.setAccount(entry.userId, 'pinterest', {
+        handle: (username ? '@' + username + ' · ' : '') + board.name,
+        boardId: board.id, boardName: board.name, token: secure.encrypt(token),
+        status: 'connected', connectedAt: new Date().toISOString()
+      });
+      return redirect(res, '/?pinterest=connected');
+    } catch (err) {
+      console.error('[pinterest oauth]', err.message);
+      return redirect(res, '/?pinterest=error');
     }
   }
 
@@ -419,6 +456,8 @@ const server = http.createServer(async (req, res) => {
             await linkedinApi.deleteOrgPost({ ...accounts.linkedin, token: secure.decrypt(accounts.linkedin.token) }, r.platformId);
           } else if (t === 'tiktok') {
             note('To remove it from TikTok, delete it in the TikTok app (TikTok does not allow deleting posts via API).');
+          } else if (t === 'pinterest' && pinterestApi.isConfigured() && accounts.pinterest && accounts.pinterest.token && r.platformId) {
+            await pinterestApi.deletePin({ ...accounts.pinterest, token: secure.decrypt(accounts.pinterest.token) }, r.platformId);
           }
         } catch (e) {
           note(`${providers.get(t) ? providers.get(t).meta().name : t} deletion failed: ${e.message}.`);

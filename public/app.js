@@ -60,6 +60,13 @@ const OAUTH_MSG = {
     denied: 'Connection canceled.',
     expired: 'That connection link expired — please try again.',
     error: 'Could not connect to TikTok. Please try again.'
+  },
+  pinterest: {
+    connected: '✅ Pinterest connected!',
+    noboard: 'Connected, but no Pinterest board was found. Create a board on Pinterest first.',
+    denied: 'Connection canceled.',
+    expired: 'That connection link expired — please try again.',
+    error: 'Could not connect to Pinterest. Please try again.'
   }
 };
 function oauthReturn(params) {
@@ -74,7 +81,7 @@ window.addEventListener('message', async ev => {
   if (ev.origin !== location.origin || !ev.data || !OAUTH_MSG[ev.data.type]) return;
   const msg = OAUTH_MSG[ev.data.type][ev.data.status];
   if (msg) toast(msg);
-  if (state.user && ['connected', 'nopage', 'noorg'].includes(ev.data.status)) {
+  if (state.user && ['connected', 'nopage', 'noorg', 'noboard'].includes(ev.data.status)) {
     await loadData();
     if (state.view !== 'connections') { state.view = 'connections'; history.pushState({ view: 'connections' }, '', '/' + slugForView('connections')); }
     renderView();
