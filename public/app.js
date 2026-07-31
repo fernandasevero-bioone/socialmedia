@@ -736,11 +736,17 @@ async function renderHistory(root) {
           </div>
         </div>
         <p style="white-space:pre-wrap; margin:10px 0;">${esc(post.caption)}</p>
-        <div class="platforms">${post.platforms.map(t => {
-          const r = post.results[t];
-          const link = r && r.externalUrl;
+        <div style="display:flex; flex-direction:column; gap:6px;">${post.platforms.map(t => {
+          const r = post.results[t] || {};
+          const link = r.externalUrl;
           const chip = `<span class="chip" style="background:${platMeta(t).color}"><span class="dot"></span>${esc(platMeta(t).name)}</span>`;
-          return link ? `<a href="${esc(link)}" target="_blank" style="text-decoration:none;">${chip}</a>` : chip;
+          let statusEl;
+          if (post.status === 'scheduled') statusEl = '<span class="subtle" style="font-size:.8rem;">scheduled</span>';
+          else if (r.demo) statusEl = '<span class="subtle" style="font-size:.8rem;">demo (not really posted)</span>';
+          else if (r.ok === false) statusEl = `<span style="color:var(--bo-pink); font-size:.8rem; font-weight:700;">✗ ${esc(r.error || 'failed')}</span>`;
+          else if (link) statusEl = `<a href="${esc(link)}" target="_blank" style="color:var(--bo-teal); font-size:.8rem; font-weight:700;">✓ view live post ↗</a>`;
+          else statusEl = '<span class="subtle" style="font-size:.8rem;">posted</span>';
+          return `<div style="display:flex; align-items:center; gap:8px;">${chip}${statusEl}</div>`;
         }).join('')}</div>
       </div>
     </div></div>`;
