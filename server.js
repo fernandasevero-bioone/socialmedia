@@ -23,6 +23,7 @@ const tiktokApi = require('./lib/tiktok');
 const pinterestApi = require('./lib/pinterest');
 const secure = require('./lib/secure');
 
+const BUILD = 'linkedin-diag-2026-07'; // bump on each deploy-relevant change; check via /api/version
 const oauthStates = new Map(); // state -> { userId, ts }
 function baseUrlFrom(req) {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
@@ -310,6 +311,10 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/me') {
       const user = currentUser(req);
       return user ? send(res, 200, { user }) : send(res, 401, { error: 'not logged in' });
+    }
+    if (p === '/api/version') {
+      // public build marker — visit /api/version to confirm which code is live
+      return send(res, 200, { build: BUILD });
     }
 
     // Everything below requires auth
