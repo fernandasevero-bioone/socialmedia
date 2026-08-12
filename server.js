@@ -23,7 +23,7 @@ const tiktokApi = require('./lib/tiktok');
 const pinterestApi = require('./lib/pinterest');
 const secure = require('./lib/secure');
 
-const BUILD = 'hide-pinterest-2026-07'; // bump on each deploy-relevant change; check via /api/version
+const BUILD = 'tiktok-diag-2026-08'; // bump on each deploy-relevant change; check via /api/version
 const oauthStates = new Map(); // state -> { userId, ts }
 function baseUrlFrom(req) {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
@@ -317,6 +317,17 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/version') {
       // public build marker — visit /api/version to confirm which code is live
       return send(res, 200, { build: BUILD });
+    }
+    if (p === '/api/diag/tiktok') {
+      // masked credential check + the exact authorize URL we send to TikTok,
+      // so a "client_key" error can be diagnosed without exposing secrets
+      const redirectUri = `${baseUrlFrom(req)}/oauth/tiktok/callback`;
+      return send(res, 200, {
+        configured: tiktokApi.isConfigured(),
+        credentials: tiktokApi.debugInfo(),
+        redirectUri,
+        authorizeUrl: tiktokApi.isConfigured() ? tiktokApi.authUrl(redirectUri, 'DIAGNOSTIC') : null
+      });
     }
 
     // Everything below requires auth
