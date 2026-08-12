@@ -1,60 +1,106 @@
 {
   "_comment": "Corporate-curated post library. Categories are managed by corporate in the Admin tab. Captions sourced from the Pest Control Audience deck. Franchisees pick a post, tweak the caption (location/phone if needed), and publish.",
-  "categories": ["Educational", "Service", "Holidays", "Brand Videos", "Target Audience", "Brand"],
+  "categories": [
+    "Educational",
+    "Service",
+    "Holidays",
+    "Brand Videos",
+    "Target Audience",
+    "Brand"
+  ],
   "posts": [
     {
       "id": "lib-pest-cleanup-after",
       "category": "Target Audience",
       "title": "Cleanup After Pest Control",
       "image": "/media/decontamination-after-pest-control.png",
-      "media": ["/media/decontamination-after-pest-control.png"],
+      "media": [
+        "/media/decontamination-after-pest-control.png"
+      ],
       "caption": "Once the pest is gone, the cleanup is not always over. Rodents, bats, pigeons, and other pests can leave behind droppings, nesting debris, and contamination. Pest control takes care of the pests, but the waste they leave behind often needs professional cleaning too. It can carry bacteria that may lead to illness, and some of it is acidic enough to damage surfaces and property over time. That is where Bio-One comes in. We take care of the cleanup and decontamination after the pest problem is solved, so the property is left safe and ready to use. Call 888-292-3215 or visit BioOneInc.com to learn how we can support your team and your clients. #BioOne #BiohazardCleanup #PestControl #PestManagement",
-      "platforms": ["facebook", "instagram", "linkedin", "pinterest"]
+      "platforms": [
+        "facebook",
+        "instagram",
+        "linkedin"
+      ]
     },
     {
       "id": "lib-pest-who-shows-up",
       "category": "Target Audience",
       "title": "Who Shows Up Matters",
       "image": "/media/trusted-pest-control-partner.png",
-      "media": ["/media/trusted-pest-control-partner.png"],
+      "media": [
+        "/media/trusted-pest-control-partner.png"
+      ],
       "caption": "Pest Control companies: when you bring in a cleanup partner, who shows up matters. Every Bio-One team is trained and certified, follows proper safety and PPE protocols on every job, and meets federal and local compliance standards. That means safe, discreet work that protects your people, your clients, and your reputation. With more than 130 offices across 40 states, a trained Bio-One team is ready to help near you. Call 888-292-3215 or visit BioOneInc.com to learn how we can support your work. #BioOne #BiohazardCleanup #PestControl #PestManagement",
-      "platforms": ["facebook", "instagram", "linkedin", "pinterest"]
+      "platforms": [
+        "facebook",
+        "instagram",
+        "linkedin"
+      ]
     },
     {
       "id": "lib-pest-nationwide",
       "category": "Target Audience",
       "title": "Nationwide Cleanup Partner",
       "image": "/media/nationwide-cleanup.png",
-      "media": ["/media/nationwide-cleanup.png"],
+      "media": [
+        "/media/nationwide-cleanup.png"
+      ],
       "caption": "Wherever the job is, there is a Bio-One team ready to help. When the pests are gone, the cleanup is not always over. Rodents, bats, birds, and other pests leave behind droppings and contamination that can carry bacteria, spread illness, and damage the property over time. With more than 130 offices across 40 states, we partner with pest control companies nationwide to handle the cleanup after the pests are out. Call 888-292-3215 to learn how we can support your team and your clients. #BioOne #BiohazardCleanup #PestControl #PestManagement",
-      "platforms": ["facebook", "instagram", "linkedin", "pinterest"]
+      "platforms": [
+        "facebook",
+        "instagram",
+        "linkedin"
+      ]
     },
     {
       "id": "lib-video-pigeon",
       "category": "Brand Videos",
       "title": "Pigeon Droppings",
       "image": "/media/pigeon-droppings.mp4",
-      "media": ["/media/pigeon-droppings.mp4"],
+      "media": [
+        "/media/pigeon-droppings.mp4"
+      ],
       "caption": "Getting rid of the pigeons is only half the problem. The droppings they leave behind are more than a mess. Once they dry, they crumble into a fine dust that can carry histoplasmosis, a fungal infection that can move from the lungs to the eyes and even lead to vision loss. The droppings are also acidic. Over time, they eat away at metal, stone, and concrete, damaging the property and leading to costly repairs. This isn't a job for a standard cleaning crew. Bio-One handles pigeon droppings safely, with full removal, decontamination, and proper disposal by trained and certified technicians. If a bird problem leaves more behind than expected, we're here to help. Find your local office at BioOneInc.com. #BioOne #BiohazardCleanup #PestControl",
-      "platforms": ["facebook", "instagram", "tiktok", "linkedin"]
+      "platforms": [
+        "facebook",
+        "instagram",
+        "tiktok",
+        "linkedin"
+      ]
     },
     {
       "id": "lib-video-bat",
       "category": "Brand Videos",
       "title": "Bat Guano",
       "image": "/media/bat-guano.mp4",
-      "media": ["/media/bat-guano.mp4"],
+      "media": [
+        "/media/bat-guano.mp4"
+      ],
       "caption": "Removing the bats does not remove the contamination. Bat droppings can carry fungal spores that cause histoplasmosis, a serious lung infection, once they go airborne. Their acidity will also eat into wood, metal, and insulation if it is not removed. That part takes professional decontamination, not a standard cleanup. Pest control handles the bats. Bio-One handles what they leave behind, safely and correctly. Reach out if you are a pest control company looking for a cleanup partner, or if you need decontamination at your property. Find your local office at BioOneInc.com. #BioOne #BiohazardCleanup #PestControl #PestManagement",
-      "platforms": ["facebook", "instagram", "tiktok", "linkedin"]
+      "platforms": [
+        "facebook",
+        "instagram",
+        "tiktok",
+        "linkedin"
+      ]
     },
     {
       "id": "lib-video-rodent",
       "category": "Brand Videos",
       "title": "Rodent Droppings",
       "image": "/media/rodent-droppings.mp4",
-      "media": ["/media/rodent-droppings.mp4"],
+      "media": [
+        "/media/rodent-droppings.mp4"
+      ],
       "caption": "Pest control removes the problem. Decontamination finishes the job. Once the rodents are gone, droppings, urine, saliva, and nesting materials are left behind and can carry bacteria, viruses, and parasites that may go airborne when disturbed. Diseases like Hantavirus, Leptospirosis, and Salmonella have all been linked to rodent waste. At Bio-One, our trained technicians use proper PPE, OSHA-compliant procedures, and professional disinfection methods to clean and restore the affected areas. We work with pest control partners, facility teams, and property managers to make sure the space is safe to use again. Looking for a reliable decontamination partner? Find your local office at BioOneInc.com. #BioOne #BiohazardCleanup #RodentCleanup",
-      "platforms": ["facebook", "instagram", "tiktok", "linkedin"]
+      "platforms": [
+        "facebook",
+        "instagram",
+        "tiktok",
+        "linkedin"
+      ]
     }
   ]
 }
