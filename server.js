@@ -23,7 +23,7 @@ const tiktokApi = require('./lib/tiktok');
 const pinterestApi = require('./lib/pinterest');
 const secure = require('./lib/secure');
 
-const BUILD = 'video-range-2026-09'; // bump on each deploy-relevant change; check via /api/version
+const BUILD = 'covers-2026-09'; // bump on each deploy-relevant change; check via /api/version
 const oauthStates = new Map(); // state -> { userId, ts }
 function baseUrlFrom(req) {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
