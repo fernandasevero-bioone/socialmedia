@@ -104,6 +104,7 @@
       "category": "Brand Videos",
       "title": "Pigeon Droppings",
       "image": "/media/pigeon-droppings.mp4",
+      "cover": "/media/pigeon-cover.png",
       "media": [
         "/media/pigeon-droppings.mp4"
       ],
@@ -120,6 +121,7 @@
       "category": "Brand Videos",
       "title": "Bat Guano",
       "image": "/media/bat-guano.mp4",
+      "cover": "/media/bat-cover.png",
       "media": [
         "/media/bat-guano.mp4"
       ],
@@ -136,6 +138,7 @@
       "category": "Brand Videos",
       "title": "Rodent Droppings",
       "image": "/media/rodent-droppings.mp4",
+      "cover": "/media/rodent-cover.png",
       "media": [
         "/media/rodent-droppings.mp4"
       ],

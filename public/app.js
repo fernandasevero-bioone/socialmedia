@@ -34,10 +34,18 @@ async function withBusy(btn, fn, busyLabel) {
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const platMeta = id => state.platforms.find(p => p.id === id) || { name:id, color:'#7A7A80' };
 const isVideo = url => /\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(url || '');
-// markup for a media thumbnail (image or video) inside a .thumb container
-const mediaThumb = (url, alt) => isVideo(url)
-  ? `<video src="${esc(url)}" muted playsinline preload="metadata"></video><span class="play-badge">▶</span>`
-  : `<img src="${esc(url)}" alt="${esc(alt||'')}" onerror="this.style.display='none'"/>`;
+// markup for a media thumbnail (image or video) inside a .thumb container.
+// When a video has a `cover` poster image we render that image (with a play
+// badge) instead of the <video> element — a poster shows reliably on mobile,
+// where an un-played <video> often renders as a black box.
+const mediaThumb = (url, alt, cover) => {
+  if (isVideo(url)) {
+    return cover
+      ? `<img src="${esc(cover)}" alt="${esc(alt||'')}" onerror="this.style.display='none'"/><span class="play-badge">▶</span>`
+      : `<video src="${esc(url)}" muted playsinline preload="metadata" ${cover?`poster="${esc(cover)}"`:''}></video><span class="play-badge">▶</span>`;
+  }
+  return `<img src="${esc(url)}" alt="${esc(alt||'')}" onerror="this.style.display='none'"/>`;
+};
 
 // ---------- bootstrap ----------
 const OAUTH_MSG = {
@@ -371,7 +379,7 @@ function renderLibrary(root) {
   grid.className = 'grid grid-4';
   grid.innerHTML = visible.map(post => `
     <div class="card">
-      <div class="thumb preview-open" data-preview="${esc(post.id)}" title="Click to preview">${mediaThumb(post.image, post.title)}${(post.media && post.media.length > 1) ? `<span class="count-badge">+${post.media.length - 1}</span>` : ''}</div>
+      <div class="thumb preview-open" data-preview="${esc(post.id)}" title="Click to preview">${mediaThumb(post.image, post.title, post.cover)}${(post.media && post.media.length > 1) ? `<span class="count-badge">+${post.media.length - 1}</span>` : ''}</div>
       <div class="pad">
         ${post.category ? `<span class="tag">${esc(post.category)}</span>` : ''}
         <h2 class="card-title preview-open" data-preview="${esc(post.id)}" style="cursor:pointer;">${esc(post.title)}</h2>
@@ -402,6 +410,7 @@ function renderLibrary(root) {
 function usePost(post) {
   const media = (post.media && post.media.length) ? [...post.media] : [post.image];
   state.editing = { libraryId: post.id, caption: post.caption, image: post.image, media,
+    cover: post.cover || '',
     category: post.category || '', platforms: post.platforms.filter(t => state.accounts[t]),
     perPlatform: false, captions: {} };
   renderView();
@@ -422,7 +431,7 @@ function openLibraryPreview(post) {
       </div>
       <h2 style="margin:8px 0 12px;">${esc(post.title)}</h2>
       <div class="preview-media">${isVideo(cover)
-        ? `<video src="${esc(cover)}" controls playsinline></video>`
+        ? `<video src="${esc(cover)}" controls playsinline preload="metadata" ${post.cover?`poster="${esc(post.cover)}"`:''}></video>`
         : `<img src="${esc(cover)}" alt="${esc(post.title)}"/>`}</div>
       ${media.length > 1 ? `<div class="gallery" style="padding:10px 0;">${media.map((m,i)=>`<div class="g-thumb ${i===0?'cover':''}">${isVideo(m)?`<video src="${esc(m)}" muted></video>`:`<img src="${esc(m)}"/>`}</div>`).join('')}</div>` : ''}
       <p style="white-space:pre-wrap; font-size:.92rem; margin:14px 0; max-height:30vh; overflow:auto;">${esc(post.caption)}</p>
@@ -523,7 +532,7 @@ function renderComposer(root) {
         <div class="thumb">${!e.media[0]
           ? `<div style="color:#fff; text-align:center; padding:24px; font-weight:700;">Your image or video<br/>preview appears here</div>`
           : isVideo(e.media[0])
-            ? `<video src="${esc(e.media[0])}" controls playsinline></video>`
+            ? `<video src="${esc(e.media[0])}" controls playsinline preload="metadata" ${e.cover?`poster="${esc(e.cover)}"`:''}></video>`
             : `<img src="${esc(e.media[0])}" onerror="this.parentNode.style.minHeight='220px'"/>`}</div>
         ${e.media.length > 1 ? `<div class="gallery">${galleryThumbs}</div>` : ''}
         <div class="pad"><span class="tag">Live preview</span>
