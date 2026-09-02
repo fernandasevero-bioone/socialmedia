@@ -23,7 +23,7 @@ const tiktokApi = require('./lib/tiktok');
 const pinterestApi = require('./lib/pinterest');
 const secure = require('./lib/secure');
 
-const BUILD = 'covers-2026-09b'; // bump on each deploy-relevant change; check via /api/version
+const BUILD = 'covers-cachebust-2026-09'; // bump on each deploy-relevant change; check via /api/version
 const oauthStates = new Map(); // state -> { userId, ts }
 function baseUrlFrom(req) {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
@@ -74,22 +74,40 @@ function currentUser(req) {
   return auth.userForToken(getCookie(req, 'session'));
 }
 
+// The app shell (index.html) is served with the current BUILD stamped into the
+// asset URLs (/app.js?v=BUILD, /brand.css?v=BUILD) so every deploy busts the
+// browser cache automatically — no hard refresh needed. The shell itself is
+// sent no-cache so a new deploy is picked up immediately.
+function serveIndex(res) {
+  fs.readFile(path.join(PUBLIC_DIR, 'index.html'), 'utf8', (e, html) => {
+    if (e) return send(res, 404, { error: 'not found' });
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-cache' });
+    res.end(html.replace(/__BUILD__/g, BUILD));
+  });
+}
+
+// Small text assets (js/css) change on every deploy — never cache them; the
+// ?v=BUILD query already makes them unique per release. Media (images/videos)
+// is large and stable, so it stays cacheable.
+const NO_CACHE_EXT = new Set(['.html', '.js', '.css']);
+function cacheControlFor(ext) {
+  return NO_CACHE_EXT.has(ext) ? 'no-cache' : 'public, max-age=3600';
+}
+
 function serveStatic(req, res, urlPath) {
   const rel = urlPath === '/' ? '/index.html' : urlPath;
+  if (rel === '/index.html') return serveIndex(res);
   const filePath = path.join(PUBLIC_DIR, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
   if (!filePath.startsWith(PUBLIC_DIR)) return send(res, 403, { error: 'forbidden' });
   fs.stat(filePath, (err, stat) => {
     if (err || !stat.isFile()) {
       // SPA fallback: extensionless routes (e.g. /calendar, /analytics) serve
       // the app shell so deep links and refresh work.
-      if (!path.extname(filePath)) {
-        return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, b2) =>
-          e2 ? send(res, 404, { error: 'not found' })
-             : (res.writeHead(200, { 'Content-Type': 'text/html' }), res.end(b2)));
-      }
+      if (!path.extname(filePath)) return serveIndex(res);
       return send(res, 404, { error: 'not found' });
     }
     const type = MIME[path.extname(filePath)] || 'application/octet-stream';
+    const cacheControl = cacheControlFor(path.extname(filePath));
     const total = stat.size;
     const range = req.headers.range;
     // Byte-range support is REQUIRED for <video> playback in iOS Safari (and
@@ -116,7 +134,7 @@ function serveStatic(req, res, urlPath) {
           'Content-Range': `bytes ${start}-${end}/${total}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': end - start + 1,
-          'Cache-Control': 'public, max-age=3600'
+          'Cache-Control': cacheControl
         });
         if (req.method === 'HEAD') return res.end();
         return fs.createReadStream(filePath, { start, end }).pipe(res);
@@ -126,7 +144,7 @@ function serveStatic(req, res, urlPath) {
       'Content-Type': type,
       'Accept-Ranges': 'bytes',
       'Content-Length': total,
-      'Cache-Control': 'public, max-age=3600'
+      'Cache-Control': cacheControl
     });
     if (req.method === 'HEAD') return res.end();
     fs.createReadStream(filePath).pipe(res);
