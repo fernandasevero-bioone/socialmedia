@@ -101,6 +101,54 @@
         "tiktok",
         "linkedin"
       ]
+    },
+    {
+      "id": "lib-video-mold",
+      "category": "Brand Videos",
+      "title": "Mold Remediation",
+      "image": "/media/mold-remediation.mp4",
+      "media": [
+        "/media/mold-remediation.mp4"
+      ],
+      "caption": "Mold is easy to underestimate. That small spot on the wall is usually just the part you can see. The real growth often spreads behind walls, under floors, and through vents. And it moves fast. Mold can start growing within 24 to 48 hours of a leak or moisture problem. Regular cleaning only reaches the surface, and even bleach can't get to the root, so it keeps coming back. Bio-One handles it the right way. Our trained technicians remove it safely and treat the source, so it doesn't come back. If you're seeing mold or noticing a musty smell, reach out to your local Bio-One team. We're ready when you need us. #BioOne #MoldRemediation  #BiohazardCleanup",
+      "platforms": [
+        "facebook",
+        "instagram",
+        "tiktok",
+        "linkedin"
+      ]
+    },
+    {
+      "id": "lib-video-odor",
+      "category": "Brand Videos",
+      "title": "Odor Remediation",
+      "image": "/media/odor-remediation.mp4",
+      "media": [
+        "/media/odor-remediation.mp4"
+      ],
+      "caption": "A bad smell on a property is often the first sign that something else is wrong. Pets, water damage, mold, smoke, biological residue, or hidden contamination can all leave odors that no amount of cleaning seems to fix. The smell is the symptom. The cause is somewhere else. That is what Bio-One looks for. We find the source, remove what is causing the odor, and treat the space so it stays clean, not just covered up. Looking for a reliable cleanup partner? We are nationwide. Find your local office at BioOneInc.com.",
+      "platforms": [
+        "facebook",
+        "instagram",
+        "tiktok",
+        "linkedin"
+      ]
+    },
+    {
+      "id": "lib-video-feces-urine",
+      "category": "Brand Videos",
+      "title": "Feces/Urine Remediation",
+      "image": "/media/feces-urine-cleanup.mp4",
+      "media": [
+        "/media/feces-urine-cleanup.mp4"
+      ],
+      "caption": "Human or animal urine and feces are considered biohazardous waste. If left unattended or improperly disinfected, the risk of disease may follow. The Bio-One team is trained to handle the removal of human, animal, and pet waste, with disinfection tailored to each situation and professional deodorization service. Find your local Bio-One at BioOneInc.com. Available 24/7. #BioOne #BiohazardCleanup #DecontaminationServices",
+      "platforms": [
+        "facebook",
+        "instagram",
+        "tiktok",
+        "linkedin"
+      ]
     }
   ]
 }
