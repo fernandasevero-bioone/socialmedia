@@ -85,6 +85,21 @@
       ]
     },
     {
+      "id": "lib-pm-video-trusted-partner",
+      "category": "Target Audience",
+      "title": "Property Managers: How We Help (Video)",
+      "image": "/media/property-managers-video.mp4",
+      "media": [
+        "/media/property-managers-video.mp4"
+      ],
+      "caption": "Property managers trust Bio-One because we make hard situations easier. Fast response, discreet service, and a job done right the first time, so you can get the property ready for residents again. Go to biooneinc.com/locations to find a Bio-One near you",
+      "platforms": [
+        "facebook",
+        "instagram",
+        "linkedin"
+      ]
+    },
+    {
       "id": "lib-video-pigeon",
       "category": "Brand Videos",
       "title": "Pigeon Droppings",
