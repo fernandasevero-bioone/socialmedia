@@ -23,7 +23,7 @@ const tiktokApi = require('./lib/tiktok');
 const pinterestApi = require('./lib/pinterest');
 const secure = require('./lib/secure');
 
-const BUILD = 'tiktok-diag-2026-08'; // bump on each deploy-relevant change; check via /api/version
+const BUILD = 'video-range-2026-09'; // bump on each deploy-relevant change; check via /api/version
 const oauthStates = new Map(); // state -> { userId, ts }
 function baseUrlFrom(req) {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
@@ -78,8 +78,8 @@ function serveStatic(req, res, urlPath) {
   const rel = urlPath === '/' ? '/index.html' : urlPath;
   const filePath = path.join(PUBLIC_DIR, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
   if (!filePath.startsWith(PUBLIC_DIR)) return send(res, 403, { error: 'forbidden' });
-  fs.readFile(filePath, (err, buf) => {
-    if (err) {
+  fs.stat(filePath, (err, stat) => {
+    if (err || !stat.isFile()) {
       // SPA fallback: extensionless routes (e.g. /calendar, /analytics) serve
       // the app shell so deep links and refresh work.
       if (!path.extname(filePath)) {
@@ -89,8 +89,47 @@ function serveStatic(req, res, urlPath) {
       }
       return send(res, 404, { error: 'not found' });
     }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
-    res.end(buf);
+    const type = MIME[path.extname(filePath)] || 'application/octet-stream';
+    const total = stat.size;
+    const range = req.headers.range;
+    // Byte-range support is REQUIRED for <video> playback in iOS Safari (and
+    // lets any browser seek). Without a 206 response, mobile browsers refuse to
+    // play the video — it works on desktop but does nothing when tapped on a
+    // phone. We stream the file so large videos don't buffer in memory.
+    if (range) {
+      const m = /^bytes=(\d*)-(\d*)$/.exec(range);
+      if (m && (m[1] !== '' || m[2] !== '')) {
+        let start, end;
+        if (m[1] === '') {                    // suffix range: last N bytes
+          start = Math.max(0, total - parseInt(m[2], 10));
+          end = total - 1;
+        } else {
+          start = parseInt(m[1], 10);
+          end = m[2] === '' ? total - 1 : Math.min(parseInt(m[2], 10), total - 1);
+        }
+        if (start > end || start >= total) {
+          res.writeHead(416, { 'Content-Range': `bytes */${total}`, 'Accept-Ranges': 'bytes' });
+          return res.end();
+        }
+        res.writeHead(206, {
+          'Content-Type': type,
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': end - start + 1,
+          'Cache-Control': 'public, max-age=3600'
+        });
+        if (req.method === 'HEAD') return res.end();
+        return fs.createReadStream(filePath, { start, end }).pipe(res);
+      }
+    }
+    res.writeHead(200, {
+      'Content-Type': type,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': total,
+      'Cache-Control': 'public, max-age=3600'
+    });
+    if (req.method === 'HEAD') return res.end();
+    fs.createReadStream(filePath).pipe(res);
   });
 }
 
