@@ -238,7 +238,7 @@ textarea:focus { outline:none; border-color: var(--bo-blue); }
 .modal-overlay { position:fixed; inset:0; background:rgba(36,36,40,.55); display:grid; place-items:center; z-index:50; padding:20px; }
 .modal-card { background:#fff; border-radius:16px; box-shadow:var(--shadow-lg); padding:22px; width:min(520px, 94vw); max-height:88vh; overflow:auto; }
 .preview-open { cursor: pointer; }
-.preview-media { border-radius:12px; overflow:hidden; background:var(--bo-gradient); max-height:55vh; display:grid; place-items:center; }
+.preview-media { border-radius:12px; overflow:hidden; background:#EBECEF; max-height:55vh; display:grid; place-items:center; }
 .preview-media img, .preview-media video { width:100%; max-height:55vh; object-fit:contain; display:block; }
 .hist-thumb { width:84px; height:84px; flex-shrink:0; border-radius:10px; overflow:hidden; background:#EBECEF; position:relative; }
 .hist-thumb img, .hist-thumb video { width:100%; height:100%; object-fit:cover; display:block; }
